@@ -18,8 +18,7 @@ const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = requi
     userSessions = {};
 
 let pairingRequested = !1,
-    reconnecting = !1,
-    lastPairingTime = 0;
+    reconnecting = !1;
 
 process.on('uncaughtException', e => console.error('❌ EX:', e.message || e));
 process.on('unhandledRejection', e => console.error('❌ REJ:', e.message || e));
@@ -89,39 +88,33 @@ async function startBot() {
                 keepAliveIntervalMs: 30000
             });
 
+        // Connection Event එකෙන් පිටත ස්ථාවරව Pairing Code එක ලබා ගැනීම
+        if (!sock.authState.creds.registered && !pairingRequested) {
+            pairingRequested = !0;
+            setTimeout(async () => {
+                try {
+                    const n = PHONE_NUMBER.replace(/[^0-9]/g, '');
+                    if (n) {
+                        let code = await sock.requestPairingCode(n);
+                        if (code) console.log('\n🔐 CODE: ' + (code.match(/.{1,4}/g)?.join('-') || code) + '\n');
+                    }
+                } catch (e) {
+                    console.error("❌ Pairing Code Error:", e.message || e);
+                    pairingRequested = !1;
+                }
+            }, 4000);
+        }
+
         sock.ev.on('creds.update', saveCreds);
         sock.ev.on('connection.update', async u => {
             const { connection: c, lastDisconnect: l } = u;
-
-            if (c === 'connecting' && !sock.authState.creds.registered && !pairingRequested) {
-                const now = Date.now();
-                if (now - lastPairingTime > 300000) { // විනාඩි 5 Cooldown
-                    pairingRequested = !0;
-                    lastPairingTime = now;
-                    
-                    // Connection එක ස්ථාවර වීමට තත්පර 6ක ප්‍රමාදයක් ලබා දෙයි
-                    setTimeout(async () => {
-                        try {
-                            const n = PHONE_NUMBER.replace(/[^0-9]/g, '');
-                            if (n && !sock.authState.creds.registered) {
-                                let code = await sock.requestPairingCode(n);
-                                if (code) console.log('\n🔐 CODE: ' + (code.match(/.{1,4}/g)?.join('-') || code) + '\n');
-                            }
-                        } catch (e) {
-                            console.error("❌ Pairing Code Error:", e.message || e);
-                        } finally {
-                            setTimeout(() => { pairingRequested = !1; }, 300000);
-                        }
-                    }, 6000);
-                }
-            }
 
             if (c === 'open') { reconnecting = !1; console.log('\n✅ SARA MOVIE BOT ONLINE!\n') }
             if (c === 'close') {
                 const st = l?.error?.output?.statusCode;
                 if (st !== DisconnectReason.loggedOut && !reconnecting) {
                     reconnecting = !0;
-                    setTimeout(() => { reconnecting = !1; startBot() }, 5000)
+                    setTimeout(() => { pairingRequested = !1; reconnecting = !1; startBot() }, 5000)
                 }
             }
         });
@@ -245,4 +238,3 @@ async function startBot() {
 
 setInterval(() => {}, 3600000);
 startBot();
-
