@@ -1,17 +1,14 @@
 {
   "name": "sara-movie-bot",
   "version": "1.0.0",
-  "description": "WhatsApp Movie Bot powered by Baileys",
+  "description": "WhatsApp Movie Bot",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
-    "@whiskeysockets/baileys": "^6.6.0",
-    "axios": "^1.6.8",
-    "pino": "^8.19.0"
-  },
-  "engines": {
-    "node": ">=18.0.0"
+    "@whiskeysockets/baileys": "^6.7.12",
+    "axios": "^1.7.0",
+    "pino": "^9.0.0"
   }
 }
