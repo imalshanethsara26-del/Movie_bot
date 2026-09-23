@@ -111,18 +111,26 @@ async function startBot() {
         sock.ev.on('connection.update', async u => {
             const { connection: c, lastDisconnect: l } = u;
 
+            // Fixed Pairing Code Request Logic
             if (c === 'connecting' && !sock.authState.creds.registered && !pairingRequested) {
                 pairingRequested = true;
-                try {
-                    await new Promise(r => setTimeout(r, 2500));
-                    const n = PHONE_NUMBER.replace(/[^0-9]/g, '');
-                    if (n) {
-                        let code = await sock.requestPairingCode(n);
-                        if (code) console.log('\n🔐 CODE: ' + (code.match(/.{1,4}/g)?.join('-') || code) + '\n');
+                setTimeout(async () => {
+                    try {
+                        const n = PHONE_NUMBER.replace(/[^0-9]/g, '');
+                        if (n) {
+                            let code = await sock.requestPairingCode(n);
+                            if (code) {
+                                code = code.match(/.{1,4}/g)?.join('-') || code;
+                                console.log('\n==================================');
+                                console.log('🔐 YOUR PAIRING CODE:', code);
+                                console.log('==================================\n');
+                            }
+                        }
+                    } catch (e) {
+                        console.error('❌ Pairing Error:', e.message || e);
+                        pairingRequested = false;
                     }
-                } catch (e) {
-                    pairingRequested = false;
-                }
+                }, 3000);
             }
 
             if (c === 'open') {
