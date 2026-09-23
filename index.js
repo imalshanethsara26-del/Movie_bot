@@ -9,7 +9,7 @@ if (!global.crypto) {
     global.crypto = cryptoModule.webcrypto || cryptoModule;
 }
 
-const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
+const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, Browsers } = require('@whiskeysockets/baileys');
 const pino = require('pino');
 const axios = require('axios');
 
@@ -99,7 +99,7 @@ async function startBot() {
             logger: pino({ level: 'silent' }),
             printQRInTerminal: false,
             auth: state,
-            browser: ['Ubuntu', 'Chrome', '20.0.0.4'],
+            browser: Browsers.macOS('Chrome'),
             markOnlineOnConnect: false,
             mediaUploadTimeoutMs: 900000,
             connectTimeoutMs: 60000,
@@ -111,7 +111,6 @@ async function startBot() {
         sock.ev.on('connection.update', async u => {
             const { connection: c, lastDisconnect: l } = u;
 
-            // Fixed Pairing Code Request Logic
             if (c === 'connecting' && !sock.authState.creds.registered && !pairingRequested) {
                 pairingRequested = true;
                 setTimeout(async () => {
@@ -130,7 +129,7 @@ async function startBot() {
                         console.error('❌ Pairing Error:', e.message || e);
                         pairingRequested = false;
                     }
-                }, 3000);
+                }, 6000);
             }
 
             if (c === 'open') {
