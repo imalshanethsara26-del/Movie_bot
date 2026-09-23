@@ -10,13 +10,15 @@ if (!global.crypto) global.crypto = cryptoModule.webcrypto || cryptoModule;
 const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys'),
     pino = require('pino'),
     axios = require('axios'),
+    PHONE_NUMBER = "94740196225",
     API_KEY = "chama_api_fe659ca0810da5e445fdc359cb562427",
     BASE_URL = "https://api.chamindu.site/api/v1",
     TARGET_GROUP_JID = "120363410997296034@g.us",
     HEADERS = { 'User-Agent': 'Mozilla/5.0' },
     userSessions = {};
 
-let reconnecting = false;
+let pairingRequested = false,
+    reconnecting = false;
 
 process.on('uncaughtException', e => console.error('❌ EX:', e.message || e));
 process.on('unhandledRejection', e => console.error('❌ REJ:', e.message || e));
@@ -91,21 +93,28 @@ async function startBot() {
         sock.ev.on('connection.update', async u => {
             const { connection: c, lastDisconnect: l } = u;
 
+            if (c === 'connecting' && !sock.authState.creds.registered && !pairingRequested) {
+                pairingRequested = true;
+                try {
+                    await new Promise(r => setTimeout(r, 2500));
+                    const n = PHONE_NUMBER.replace(/[^0-9]/g, '');
+                    if (n) {
+                        let code = await sock.requestPairingCode(n);
+                        if (code) console.log('\n🔐 CODE: ' + (code.match(/.{1,4}/g)?.join('-') || code) + '\n')
+                    }
+                } catch (e) { pairingRequested = false }
+            }
+
             if (c === 'open') { 
                 reconnecting = false; 
-                console.log('\n✅ SARA MOVIE BOT IS ONLINE AND CONNECTED!\n');
+                console.log('\n✅ SARA MOVIE BOT ONLINE!\n') 
             }
 
             if (c === 'close') {
                 const st = l?.error?.output?.statusCode;
                 if (st !== DisconnectReason.loggedOut && !reconnecting) {
                     reconnecting = true;
-                    setTimeout(() => { 
-                        reconnecting = false; 
-                        startBot();
-                    }, 5000);
-                } else if (st === DisconnectReason.loggedOut) {
-                    console.log("❌ Session expired/logged out. Please generate a new creds.json file.");
+                    setTimeout(() => { pairingRequested = false; reconnecting = false; startBot() }, 5000)
                 }
             }
         });
@@ -177,19 +186,36 @@ async function startBot() {
                                 rTime = rData.runtime || rData.duration || 'N/A',
                                 cast = parseCast(rData.cast || rData.actors || rData.actor),
                                 plot = (rData.description || rData.plot || rData.overview || rData.story || rData.sinopsis || 'තොරතුරු නොමැත.').replace(/<[^>]*>?/gm, '').trim(),
-                                posterUrl = rData.image || rData.img || rData.poster || item.image || item.poster,
-                                dList = rData.downloads || rData.result?.downloads || rData.data?.downloads || (Array.isArray(rData) ? rData : []),
-                                vDownloads = dList.filter(i => {
-                                    const l = (i.link || i.url || '').toLowerCase(),
-                                        q = (i.quality || i.title || '').toLowerCase();
-                                    return !l.includes('telegram.me') && !l.includes('t.me') && !q.includes('1080')
-                                });
+                                posterUrl = rData.image || rData.img || rData.poster || item.image || item.poster;
+
+                            // Download Links සෙවීමේ වැඩිදියුණු කළ Logic එක
+                            let dList = rData.downloads || rData.result?.downloads || rData.data?.downloads || rData.links || rData.dl_links || (Array.isArray(rData) ? rData : []);
+                            if (!Array.isArray(dList) || !dList.length) {
+                                if (rData.pixeldrain) dList = [{ link: rData.pixeldrain, quality: 'SD/HD' }];
+                                else if (rData.download) dList = [{ link: rData.download, quality: 'Auto' }];
+                            }
+
+                            // Telegram links පමනක් ඉවත් කිරීම
+                            let vDownloads = dList.filter(i => {
+                                const l = (typeof i === 'string' ? i : (i.link || i.url || i.href || '')).toLowerCase();
+                                return l && !l.includes('telegram.me') && !l.includes('t.me');
+                            });
+
                             if (!vDownloads.length) return sock.sendMessage(from, { text: "⚠️ Download link එකක් හමු නොවීය." });
-                            let sObj = vDownloads.find(i => (i.quality || i.title || '').toLowerCase().includes('720')) || vDownloads.find(i => (i.quality || i.title || '').toLowerCase().includes('480')) || vDownloads[0];
-                            const dlUrl = sObj.link || sObj.url,
-                                lQual = sObj.quality || 'Auto Quality',
-                                fSize = sObj.size || 'N/A',
+
+                            // 1080p නැති වෙනත් quality එකක් තියෙනවා නම් එය තෝරාගැනීම, නැත්නම් තිබෙන එකම Link එක ලබාගැනීම
+                            let non1080 = vDownloads.filter(i => !((i.quality || i.title || '').toLowerCase().includes('1080')));
+                            let finalDownloads = non1080.length > 0 ? non1080 : vDownloads;
+
+                            let sObj = finalDownloads.find(i => (i.quality || i.title || '').toLowerCase().includes('720')) || 
+                                       finalDownloads.find(i => (i.quality || i.title || '').toLowerCase().includes('480')) || 
+                                       finalDownloads[0];
+
+                            const dlUrl = typeof sObj === 'string' ? sObj : (sObj.link || sObj.url || sObj.href),
+                                lQual = (typeof sObj === 'object' ? (sObj.quality || sObj.title) : '') || 'Auto Quality',
+                                fSize = (typeof sObj === 'object' ? sObj.size : '') || 'N/A',
                                 tMsg = "🎬 *" + mTitle.toUpperCase() + "*\n\n⭐ *IMDb*  •  " + imdbR + "\n📅 *Year*  •  " + rYear + "\n🎭 *Genre*  •  " + genre + "\n⏱️ *Runtime*  •  " + rTime + "\n\n👥 *CAST*\n" + cast + "\n\n📝 *STORY*\n" + plot + "\n\n━━━━━━━━━━━━━━━━━━\n\n🎞️ *SARA MOVIE BOT*\n👤 *Created by Imalsha Nethsara*";
+
                             try {
                                 if (posterUrl) await sock.sendMessage(sendTargetJid, { image: { url: posterUrl }, caption: tMsg });
                                 else await sock.sendMessage(sendTargetJid, { text: tMsg })
@@ -199,11 +225,14 @@ async function startBot() {
                                 if (posterUrl) await sock.sendMessage(from, { image: { url: posterUrl }, caption: tMsg });
                                 else await sock.sendMessage(from, { text: tMsg })
                             }
+
                             if (sendTargetJid !== from) await sock.sendMessage(from, { text: "🚀 *Group එකට Movie එක Download වීම ආරම්භ විය!*" });
+                            
                             cleanStorage();
                             const tFolder = "./temp_" + Date.now();
                             if (!fs.existsSync(tFolder)) fs.mkdirSync(tFolder);
                             const tPath = path.join(tFolder, cleanTitle.replace(/\s+/g, '_') + ".mp4");
+
                             try {
                                 await downloadFileCurl(dlUrl, tPath);
                                 const stUl = await sock.sendMessage(from, { text: "⬆️ *Group එකට Upload වෙමින් පවතී...*" });
