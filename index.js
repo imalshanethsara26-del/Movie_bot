@@ -17,8 +17,8 @@ const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = requi
     HEADERS = { 'User-Agent': 'Mozilla/5.0' },
     userSessions = {};
 
-let pairingRequested = !1,
-    reconnecting = !1;
+let pairingRequested = false,
+    reconnecting = false;
 
 process.on('uncaughtException', e => console.error('❌ EX:', e.message || e));
 process.on('unhandledRejection', e => console.error('❌ REJ:', e.message || e));
@@ -88,33 +88,46 @@ async function startBot() {
                 keepAliveIntervalMs: 30000
             });
 
-        // Connection Event එකෙන් පිටත ස්ථාවරව Pairing Code එක ලබා ගැනීම
-        if (!sock.authState.creds.registered && !pairingRequested) {
-            pairingRequested = !0;
-            setTimeout(async () => {
-                try {
-                    const n = PHONE_NUMBER.replace(/[^0-9]/g, '');
-                    if (n) {
-                        let code = await sock.requestPairingCode(n);
-                        if (code) console.log('\n🔐 CODE: ' + (code.match(/.{1,4}/g)?.join('-') || code) + '\n');
-                    }
-                } catch (e) {
-                    console.error("❌ Pairing Code Error:", e.message || e);
-                    pairingRequested = !1;
-                }
-            }, 4000);
-        }
-
         sock.ev.on('creds.update', saveCreds);
+
         sock.ev.on('connection.update', async u => {
             const { connection: c, lastDisconnect: l } = u;
 
-            if (c === 'open') { reconnecting = !1; console.log('\n✅ SARA MOVIE BOT ONLINE!\n') }
+            // Connection එක 'connecting' තත්වයට ආ විට එක් වතාවක් පමණක් Code එක Request කිරීම
+            if (c === 'connecting') {
+                if (!sock.authState.creds.registered && !pairingRequested) {
+                    pairingRequested = true; // තවත් පාරක් Request වීම වැළැක්වීමට Lock කරයි
+                    setTimeout(async () => {
+                        try {
+                            const n = PHONE_NUMBER.replace(/[^0-9]/g, '');
+                            if (n && !sock.authState.creds.registered) {
+                                let code = await sock.requestPairingCode(n);
+                                if (code) console.log('\n🔐 CODE: ' + (code.match(/.{1,4}/g)?.join('-') || code) + '\n');
+                            }
+                        } catch (e) {
+                            console.error("❌ Pairing Error:", e.message || e);
+                        }
+                    }, 6000); // තත්පර 6ක delay එකක්
+                }
+            }
+
+            if (c === 'open') { 
+                reconnecting = false; 
+                pairingRequested = false;
+                console.log('\n✅ SARA MOVIE BOT ONLINE!\n');
+            }
+
             if (c === 'close') {
                 const st = l?.error?.output?.statusCode;
                 if (st !== DisconnectReason.loggedOut && !reconnecting) {
-                    reconnecting = !0;
-                    setTimeout(() => { pairingRequested = !1; reconnecting = !1; startBot() }, 5000)
+                    reconnecting = true;
+                    // Register වී නැත්නම් loop එක නතර කිරීමට තත්පර 12ක් ඉඳලා Reconnect වේ
+                    const delay = sock.authState.creds.registered ? 5000 : 12000;
+                    setTimeout(() => { 
+                        pairingRequested = false; 
+                        reconnecting = false; 
+                        startBot();
+                    }, delay);
                 }
             }
         });
