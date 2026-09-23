@@ -19,7 +19,7 @@ const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = requi
 
 let pairingRequested = !1,
     reconnecting = !1,
-    lastPairingTime = 0; // 5-min Cooldown සඳහා
+    lastPairingTime = 0;
 
 process.on('uncaughtException', e => console.error('❌ EX:', e.message || e));
 process.on('unhandledRejection', e => console.error('❌ REJ:', e.message || e));
@@ -93,25 +93,26 @@ async function startBot() {
         sock.ev.on('connection.update', async u => {
             const { connection: c, lastDisconnect: l } = u;
 
-            // විනාඩි 5ක Cooldown Check එකක් සමඟ Pairing Request Logic එක
             if (c === 'connecting' && !sock.authState.creds.registered && !pairingRequested) {
                 const now = Date.now();
-                if (now - lastPairingTime > 300000) { // 300000 ms = විනාඩි 5
+                if (now - lastPairingTime > 300000) { // විනාඩි 5 Cooldown
                     pairingRequested = !0;
                     lastPairingTime = now;
-                    try {
-                        await new Promise(r => setTimeout(r, 3000));
-                        const n = PHONE_NUMBER.replace(/[^0-9]/g, '');
-                        if (n) {
-                            let code = await sock.requestPairingCode(n);
-                            if (code) console.log('\n🔐 CODE: ' + (code.match(/.{1,4}/g)?.join('-') || code) + '\n');
+                    
+                    // Connection එක ස්ථාවර වීමට තත්පර 6ක ප්‍රමාදයක් ලබා දෙයි
+                    setTimeout(async () => {
+                        try {
+                            const n = PHONE_NUMBER.replace(/[^0-9]/g, '');
+                            if (n && !sock.authState.creds.registered) {
+                                let code = await sock.requestPairingCode(n);
+                                if (code) console.log('\n🔐 CODE: ' + (code.match(/.{1,4}/g)?.join('-') || code) + '\n');
+                            }
+                        } catch (e) {
+                            console.error("❌ Pairing Code Error:", e.message || e);
+                        } finally {
+                            setTimeout(() => { pairingRequested = !1; }, 300000);
                         }
-                    } catch (e) {
-                        console.error("❌ Pairing Code Error:", e.message || e);
-                    } finally {
-                        // විනාඩි 5කට පසු නැවත ඊළඟ request එකට ඉඩ දේ
-                        setTimeout(() => { pairingRequested = !1; }, 300000);
-                    }
+                    }, 6000);
                 }
             }
 
