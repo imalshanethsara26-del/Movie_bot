@@ -10,15 +10,13 @@ if (!global.crypto) global.crypto = cryptoModule.webcrypto || cryptoModule;
 const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys'),
     pino = require('pino'),
     axios = require('axios'),
-    PHONE_NUMBER = "94740196225",
     API_KEY = "chama_api_fe659ca0810da5e445fdc359cb562427",
     BASE_URL = "https://api.chamindu.site/api/v1",
     TARGET_GROUP_JID = "120363410997296034@g.us",
     HEADERS = { 'User-Agent': 'Mozilla/5.0' },
     userSessions = {};
 
-let pairingRequested = false,
-    reconnecting = false;
+let reconnecting = false;
 
 process.on('uncaughtException', e => console.error('❌ EX:', e.message || e));
 process.on('unhandledRejection', e => console.error('❌ REJ:', e.message || e));
@@ -27,7 +25,7 @@ const cleanStorage = () => {
     try {
         fs.readdirSync('./').forEach(f => {
             if (/\.(mp4|mkv|avi|tmp|part|download)$/i.test(f) || f.startsWith('temp_'))
-                try { fs.rmSync(path.join('./', f), { recursive: !0, force: !0 }) } catch (e) {}
+                try { fs.rmSync(path.join('./', f), { recursive: true, force: true }) } catch (e) {}
         })
     } catch (e) {}
 },
@@ -67,7 +65,7 @@ downloadFileCurl = async (u, d) => {
     return new Promise((res, rej) => {
         let f = r.includes('pixeldrain.com/') && !r.includes('/api/file/') ? r.replace('pixeldrain.com/u/', 'pixeldrain.com/api/file/') : r;
         exec('curl -L -s -k --connect-timeout 30 --max-time 600 --retry 3 -A "Mozilla/5.0" "' + f + '" -o "' + d + '"', { maxBuffer: 1024 * 1024 * 1000, timeout: 600000 }, (err) => {
-            if (fs.existsSync(d) && fs.statSync(d).size > 1000000) res(!0);
+            if (fs.existsSync(d) && fs.statSync(d).size > 1000000) res(true);
             else rej(err || new Error("Download Failed"))
         })
     })
@@ -79,10 +77,10 @@ async function startBot() {
         const { state, saveCreds } = await useMultiFileAuthState('./session'),
             sock = makeWASocket({
                 logger: pino({ level: 'silent' }),
-                printQRInTerminal: !1,
+                printQRInTerminal: false,
                 auth: state,
                 browser: ['Ubuntu', 'Chrome', '20.0.0.4'],
-                markOnlineOnConnect: !1,
+                markOnlineOnConnect: false,
                 mediaUploadTimeoutMs: 900000,
                 connectTimeoutMs: 60000,
                 keepAliveIntervalMs: 30000
@@ -93,41 +91,21 @@ async function startBot() {
         sock.ev.on('connection.update', async u => {
             const { connection: c, lastDisconnect: l } = u;
 
-            // Connection එක 'connecting' තත්වයට ආ විට එක් වතාවක් පමණක් Code එක Request කිරීම
-            if (c === 'connecting') {
-                if (!sock.authState.creds.registered && !pairingRequested) {
-                    pairingRequested = true; // තවත් පාරක් Request වීම වැළැක්වීමට Lock කරයි
-                    setTimeout(async () => {
-                        try {
-                            const n = PHONE_NUMBER.replace(/[^0-9]/g, '');
-                            if (n && !sock.authState.creds.registered) {
-                                let code = await sock.requestPairingCode(n);
-                                if (code) console.log('\n🔐 CODE: ' + (code.match(/.{1,4}/g)?.join('-') || code) + '\n');
-                            }
-                        } catch (e) {
-                            console.error("❌ Pairing Error:", e.message || e);
-                        }
-                    }, 6000); // තත්පර 6ක delay එකක්
-                }
-            }
-
             if (c === 'open') { 
                 reconnecting = false; 
-                pairingRequested = false;
-                console.log('\n✅ SARA MOVIE BOT ONLINE!\n');
+                console.log('\n✅ SARA MOVIE BOT IS ONLINE AND CONNECTED!\n');
             }
 
             if (c === 'close') {
                 const st = l?.error?.output?.statusCode;
                 if (st !== DisconnectReason.loggedOut && !reconnecting) {
                     reconnecting = true;
-                    // Register වී නැත්නම් loop එක නතර කිරීමට තත්පර 12ක් ඉඳලා Reconnect වේ
-                    const delay = sock.authState.creds.registered ? 5000 : 12000;
                     setTimeout(() => { 
-                        pairingRequested = false; 
                         reconnecting = false; 
                         startBot();
-                    }, delay);
+                    }, 5000);
+                } else if (st === DisconnectReason.loggedOut) {
+                    console.log("❌ Session expired/logged out. Please generate a new creds.json file.");
                 }
             }
         });
