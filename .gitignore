@@ -1,0 +1,9 @@
+node_modules/
+session/
+temp_*
+*.mp4
+*.mkv
+*.avi
+*.tmp
+*.part
+
