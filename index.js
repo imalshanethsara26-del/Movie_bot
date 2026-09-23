@@ -18,7 +18,8 @@ const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = requi
     userSessions = {};
 
 let pairingRequested = !1,
-    reconnecting = !1;
+    reconnecting = !1,
+    lastPairingTime = 0; // 5-min Cooldown සඳහා
 
 process.on('uncaughtException', e => console.error('❌ EX:', e.message || e));
 process.on('unhandledRejection', e => console.error('❌ REJ:', e.message || e));
@@ -91,23 +92,35 @@ async function startBot() {
         sock.ev.on('creds.update', saveCreds);
         sock.ev.on('connection.update', async u => {
             const { connection: c, lastDisconnect: l } = u;
+
+            // විනාඩි 5ක Cooldown Check එකක් සමඟ Pairing Request Logic එක
             if (c === 'connecting' && !sock.authState.creds.registered && !pairingRequested) {
-                pairingRequested = !0;
-                try {
-                    await new Promise(r => setTimeout(r, 2500));
-                    const n = PHONE_NUMBER.replace(/[^0-9]/g, '');
-                    if (n) {
-                        let code = await sock.requestPairingCode(n);
-                        if (code) console.log('\n🔐 CODE: ' + (code.match(/.{1,4}/g)?.join('-') || code) + '\n')
+                const now = Date.now();
+                if (now - lastPairingTime > 300000) { // 300000 ms = විනාඩි 5
+                    pairingRequested = !0;
+                    lastPairingTime = now;
+                    try {
+                        await new Promise(r => setTimeout(r, 3000));
+                        const n = PHONE_NUMBER.replace(/[^0-9]/g, '');
+                        if (n) {
+                            let code = await sock.requestPairingCode(n);
+                            if (code) console.log('\n🔐 CODE: ' + (code.match(/.{1,4}/g)?.join('-') || code) + '\n');
+                        }
+                    } catch (e) {
+                        console.error("❌ Pairing Code Error:", e.message || e);
+                    } finally {
+                        // විනාඩි 5කට පසු නැවත ඊළඟ request එකට ඉඩ දේ
+                        setTimeout(() => { pairingRequested = !1; }, 300000);
                     }
-                } catch (e) { pairingRequested = !1 }
+                }
             }
+
             if (c === 'open') { reconnecting = !1; console.log('\n✅ SARA MOVIE BOT ONLINE!\n') }
             if (c === 'close') {
                 const st = l?.error?.output?.statusCode;
                 if (st !== DisconnectReason.loggedOut && !reconnecting) {
                     reconnecting = !0;
-                    setTimeout(() => { pairingRequested = !1; reconnecting = !1; startBot() }, 5000)
+                    setTimeout(() => { reconnecting = !1; startBot() }, 5000)
                 }
             }
         });
@@ -231,3 +244,4 @@ async function startBot() {
 
 setInterval(() => {}, 3600000);
 startBot();
+
