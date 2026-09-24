@@ -26,6 +26,18 @@ let reconnecting = false;
 process.on('uncaughtException', e => console.error('❌ EX:', e.message || e));
 process.on('unhandledRejection', e => console.error('❌ REJ:', e.message || e));
 
+// Helper: Size string එක GB බවට හරවාගැනීම
+const parseSizeGB = (sz) => {
+    if (!sz) return 0;
+    const s = sz.toString().toLowerCase();
+    const m = s.match(/([\d\.]+)/);
+    if (!m) return 0;
+    const val = parseFloat(m[1]);
+    if (s.includes('gb') || s.includes('gib')) return val;
+    if (s.includes('mb') || s.includes('mib')) return val / 1024;
+    return 0;
+};
+
 const cleanStorage = () => {
     try {
         fs.readdirSync('./').forEach(f => {
@@ -110,7 +122,6 @@ async function startBot() {
             const { connection: c, lastDisconnect: l } = u;
             if (c) console.log('🔄 Connection Status:', c);
 
-            // Request pairing code ONLY if creds.json is not registered / not available
             if ((c === 'connecting' || !c) && !sock.authState.creds.registered && !pairingRequested) {
                 pairingRequested = true;
                 console.log('⏳ Requesting Pairing Code...');
@@ -238,9 +249,31 @@ async function startBot() {
 
                             if (!vDownloads.length) return sock.sendMessage(from, { text: "⚠️ සුදුසු (720p හෝ 480p) Download link එකක් හමු නොවීය." });
 
-                            let sObj = vDownloads.find(i => (i.quality || i.name || '').toLowerCase().includes('720')) ||
-                                       vDownloads.find(i => (i.quality || i.name || '').toLowerCase().includes('480')) ||
-                                       vDownloads[0];
+                            // 720p සහ 480p Links සොයාගැනීම
+                            const item720 = vDownloads.find(i => (i.quality || i.name || '').toLowerCase().includes('720'));
+                            const item480 = vDownloads.find(i => (i.quality || i.name || '').toLowerCase().includes('480'));
+
+                            let sObj = null;
+
+                            // 720p තිබේදැයි බලයි. එහි Size එක 2GB ට වඩා වැඩි නම් 480p එකට Switch වේ.
+                            if (item720) {
+                                const size720 = parseSizeGB(item720.size);
+                                if (size720 > 2.0 && item480) {
+                                    console.log("⚠️ 720p size (>2GB) exceeds limit. Switching to 480p...");
+                                    sObj = item480;
+                                } else {
+                                    sObj = item720;
+                                }
+                            } else if (item480) {
+                                sObj = item480;
+                            } else {
+                                sObj = vDownloads[0];
+                            }
+
+                            // තෝරාගත් Link එකේ Size එක 2GB පැනලා නම්
+                            if (sObj && parseSizeGB(sObj.size) > 2.0) {
+                                return sock.sendMessage(from, { text: "⚠️ මෙම Movie එකෙහි 480p/720p දෙකම 2GB සීමාවට වඩා වැඩිය. WhatsApp එකට Upload කළ නොහැක." });
+                            }
 
                             const dlUrl = sObj.link;
                             const lQual = sObj.quality || 'Auto Quality';
@@ -267,6 +300,14 @@ async function startBot() {
 
                             try {
                                 await downloadFileCurl(dlUrl, tPath);
+
+                                // ඩවුන්ලෝඩ් වුණු ෆයිල් එකේ ඇත්ත Size එක 2GB (2000MB) පැනලා නම් Cancel කිරීම
+                                const actualSizeMB = fs.statSync(tPath).size / (1024 * 1024);
+                                if (actualSizeMB > 2000) {
+                                    cleanStorage();
+                                    return sock.sendMessage(from, { text: "⚠️ Download වුණු File එක 2GB වලට වඩා වැඩි නිසා WhatsApp එකට Upload කළ නොහැක." });
+                                }
+
                                 const stUl = await sock.sendMessage(from, { text: "⬆️ *Upload වෙමින් පවතී...*" });
 
                                 const docMsg = "🎬 *MOVIE READY!* 🍿\n\n*" + mTitle + "*\n\n⭐ *IMDb*  " + imdbR + "\n🎞️ *Quality*  " + lQual + "\n📦 *Size*  " + fSize + "\n\n✅ Your movie is ready.\n🎥 Enjoy the movie!\n\n━━━━━━━━━━━━━━━━━━\n\n🤖 *SARA MOVIE BOT*\n👤 *Created by Imalsha Nethsara*";
