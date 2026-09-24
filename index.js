@@ -1,14 +1,14 @@
-console.log("🚀 Initializing SARA MOVIE BOT (Ultra Fast Edition)...");
+console.log("🚀 Initializing SARA MOVIE BOT (Live Progress Edition)...");
 
 const fs = require('fs');
 const path = require('path');
-const { exec, execSync } = require('child_process');
+const { spawn, execSync } = require('child_process');
 const cryptoModule = require('crypto');
 
 // Auto-install aria2 package if missing in Colab
 try {
     execSync('which aria2c || (apt-get update && apt-get install -y aria2)', { stdio: 'ignore' });
-    console.log("⚡ Aria2 Fast Multi-thread Downloader is Ready!");
+    console.log("⚡ Aria2 Fast Downloader is Ready!");
 } catch (e) {
     console.log("⚠️ Aria2 check skipped.");
 }
@@ -25,7 +25,7 @@ const axios = require('axios');
 const PHONE_NUMBER = process.env.PHONE_NUMBER || "94740196225";
 const BASE_URL = process.env.BASE_URL || "https://sinhalasubapi-production.up.railway.app";
 const TARGET_GROUP_JID = process.env.TARGET_GROUP_JID || "120363410997296034@g.us";
-const HEADERS = { 'User-Agent': 'Mozilla/5.0' };
+const HEADERS = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' };
 
 const userSessions = {};
 let pairingRequested = false;
@@ -97,37 +97,53 @@ const safeDelete = async (s, f, k) => {
     }
 };
 
-// 🚀 Ultra Fast Multi-thread Downloader (16 Connections)
-const downloadFileFast = async (u, d) => {
+// 🚀 Terminal එකේ සජීවී ප්‍රතිශතය (Percentage) පෙන්වන Downloader එක
+const downloadFileFast = async (u, d, sock, targetJid) => {
     console.log("📥 Resolving real link...");
     const r = await resolveRealLink(u);
     console.log("🔗 Download Link:", r);
+
+    if (sock && targetJid) {
+        await sock.sendMessage(targetJid, { text: "📥 *Movie එක Colab එකට Download වීම ආරම්භ විය...*\n\n(කරුණාකර තත්පර කිහිපයක් රැඳී සිටින්න)" });
+    }
+
     return new Promise((res, rej) => {
         let f = r.includes('pixeldrain.com/') && !r.includes('/api/file/') ? r.replace('pixeldrain.com/u/', 'pixeldrain.com/api/file/') : r;
-        console.log("🚀 Starting Ultra Fast Download (Aria2 16 Threads)...");
-        
+        console.log("\n🚀 Starting Fast Download (Showing Progress below)...\n");
+
         const dir = path.dirname(d);
         const file = path.basename(d);
 
-        const cmd = `aria2c -x 16 -s 16 -k 1M --check-certificate=false -d "${dir}" -o "${file}" "${f}"`;
+        const args = [
+            '-x', '4',
+            '-s', '4',
+            '-k', '1M',
+            '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+            '--check-certificate=false',
+            '--summary-interval=1',
+            '-d', dir,
+            '-o', file,
+            f
+        ];
 
-        exec(cmd, { maxBuffer: 1024 * 1024 * 1000 }, (err) => {
-            if (fs.existsSync(d) && fs.statSync(d).size > 1000000) {
+        const child = spawn('aria2c', args);
+
+        child.stdout.on('data', (data) => {
+            process.stdout.write(data.toString());
+        });
+
+        child.stderr.on('data', (data) => {
+            process.stderr.write(data.toString());
+        });
+
+        child.on('close', (code) => {
+            if (code === 0 && fs.existsSync(d) && fs.statSync(d).size > 1000000) {
                 const szMB = (fs.statSync(d).size / (1024 * 1024)).toFixed(2);
-                console.log(`✅ Fast Download Finished! File Size: ${szMB} MB`);
+                console.log(`\n✅ Fast Download Finished! File Size: ${szMB} MB\n`);
                 res(true);
             } else {
-                console.log("⚠️ Aria2 failed, falling back to curl...");
-                exec(`curl -L -k --connect-timeout 30 --max-time 600 --retry 3 -A "Mozilla/5.0" "${f}" -o "${d}"`, (cErr) => {
-                    if (fs.existsSync(d) && fs.statSync(d).size > 1000000) {
-                        const szMB = (fs.statSync(d).size / (1024 * 1024)).toFixed(2);
-                        console.log(`✅ Download Finished via Curl! File Size: ${szMB} MB`);
-                        res(true);
-                    } else {
-                        console.error("❌ Download Failed!");
-                        rej(cErr || new Error("Download Failed"));
-                    }
-                });
+                console.error(`\n❌ Aria2 Download Failed (Code: ${code})`);
+                rej(new Error("Download Failed"));
             }
         });
     });
@@ -291,24 +307,10 @@ async function startBot(isFreshStart = false) {
                             const item720 = vDownloads.find(i => (i.quality || i.name || '').toLowerCase().includes('720'));
                             const item480 = vDownloads.find(i => (i.quality || i.name || '').toLowerCase().includes('480'));
 
-                            let sObj = null;
-
-                            if (item720) {
-                                const size720 = parseSizeGB(item720.size);
-                                if (size720 > 2.0 && item480) {
-                                    console.log("⚠️ 720p size (>2GB) exceeds limit. Switching to 480p...");
-                                    sObj = item480;
-                                } else {
-                                    sObj = item720;
-                                }
-                            } else if (item480) {
-                                sObj = item480;
-                            } else {
-                                sObj = vDownloads[0];
-                            }
+                            let sObj = item720 || item480 || vDownloads[0];
 
                             if (sObj && parseSizeGB(sObj.size) > 2.0) {
-                                return sock.sendMessage(from, { text: "⚠️ මෙම Movie එකෙහි 480p/720p දෙකම 2GB සීමාවට වඩා වැඩිය. WhatsApp එකට Upload කළ නොහැක." });
+                                return sock.sendMessage(from, { text: "⚠️ මෙම Movie එක 2GB සීමාවට වඩා වැඩිය. WhatsApp එකට Upload කළ නොහැක." });
                             }
 
                             const dlUrl = sObj.link;
@@ -322,12 +324,9 @@ async function startBot(isFreshStart = false) {
                                 else await sock.sendMessage(sendTargetJid, { text: tMsg });
                             } catch (e) {
                                 sendTargetJid = from;
-                                await sock.sendMessage(from, { text: "⚠️ Group එකට Message යැවීමට නොහැකි විය. Inbox එකට යවනු ලැබේ." });
                                 if (posterUrl) await sock.sendMessage(from, { image: { url: posterUrl }, caption: tMsg });
                                 else await sock.sendMessage(from, { text: tMsg });
                             }
-
-                            if (sendTargetJid !== from) await sock.sendMessage(from, { text: "🚀 *Group එකට Movie එක Download වීම ආරම්භ විය!*" });
 
                             cleanStorage();
                             const tFolder = path.join(__dirname, "temp_" + Date.now());
@@ -335,27 +334,25 @@ async function startBot(isFreshStart = false) {
                             const tPath = path.join(tFolder, cleanTitle.replace(/\s+/g, '_') + ".mp4");
 
                             try {
-                                await downloadFileFast(dlUrl, tPath);
+                                // 🚀 Download ආරම්භ කිරීම සහ Live progress පෙන්වීම
+                                await downloadFileFast(dlUrl, tPath, sock, sendTargetJid);
 
                                 const actualSizeMB = fs.statSync(tPath).size / (1024 * 1024);
-                                console.log(`📦 Actual File Size on Disk: ${actualSizeMB.toFixed(2)} MB`);
 
                                 if (actualSizeMB > 2000) {
                                     cleanStorage();
-                                    return sock.sendMessage(from, { text: "⚠️ Download වුණු File එක 2GB වලට වඩා වැඩි නිසා WhatsApp එකට Upload කළ නොහැක." });
+                                    return sock.sendMessage(from, { text: "⚠️ File එක 2GB සීමාව ඉක්මවයි." });
                                 }
 
                                 console.log("⬆️ Uploading document to WhatsApp...");
-                                const stUl = await sock.sendMessage(from, { text: "⬆️ *Upload වෙමින් පවතී...*" });
+                                const stUl = await sock.sendMessage(sendTargetJid, { text: "⬆️ *Colab එකෙන් WhatsApp එකට Upload වෙමින් පවතී...*" });
 
-                                const docMsg = "🎬 *MOVIE READY!* 🍿\n\n*" + mTitle + "*\n\n⭐ *IMDb*  " + imdbR + "\n🎞️ *Quality*  " + lQual + "\n📦 *Size*  " + fSize + "\n\n✅ Your movie is ready.\n🎥 Enjoy the movie!\n\n━━━━━━━━━━━━━━━━━━\n\n🤖 *SARA MOVIE BOT*\n👤 *Created by Imalsha Nethsara*";
+                                const docMsg = "🎬 *MOVIE READY!* 🍿\n\n*" + mTitle + "*\n\n⭐ *IMDb*  " + imdbR + "\n🎞️ *Quality*  " + lQual + "\n📦 *Size*  " + fSize + "\n\n✅ Enjoy the movie!\n\n━━━━━━━━━━━━━━━━━━\n\n🤖 *SARA MOVIE BOT*\n👤 *Created by Imalsha Nethsara*";
 
                                 await sock.sendMessage(sendTargetJid, { document: { url: tPath }, fileName: cleanTitle.replace(/\s+/g, '_') + ".mp4", mimetype: 'video/mp4', caption: docMsg });
                                 console.log("✅ Document Upload Complete!");
 
-                                await safeDelete(sock, from, stUl.key);
-
-                                if (sendTargetJid !== from) await sock.sendMessage(from, { text: "✅ *Movie එක සාර්ථකව Group එකට යවන ලදී!*" });
+                                await safeDelete(sock, sendTargetJid, stUl.key);
                                 cleanStorage();
                             } catch (err) {
                                 console.error("❌ Download/Upload Error:", err);
