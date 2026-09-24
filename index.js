@@ -26,7 +26,6 @@ let reconnecting = false;
 process.on('uncaughtException', e => console.error('❌ EX:', e.message || e));
 process.on('unhandledRejection', e => console.error('❌ REJ:', e.message || e));
 
-// Helper: Size string එක GB බවට හරවාගැනීම
 const parseSizeGB = (sz) => {
     if (!sz) return 0;
     const s = sz.toString().toLowerCase();
@@ -47,6 +46,16 @@ const cleanStorage = () => {
                 } catch (e) {}
             }
         });
+    } catch (e) {}
+};
+
+// 🧹 පැරණි Corrupted Session එක Clear කිරීම
+const clearSessionFolder = () => {
+    try {
+        if (fs.existsSync('./session')) {
+            fs.rmSync('./session', { recursive: true, force: true });
+            console.log("🧹 Previous corrupted session cleared!");
+        }
     } catch (e) {}
 };
 
@@ -82,29 +91,33 @@ const safeDelete = async (s, f, k) => {
 };
 
 const downloadFileCurl = async (u, d) => {
+    console.log("📥 Resolving real link...");
     const r = await resolveRealLink(u);
+    console.log("🔗 Download Link:", r);
     return new Promise((res, rej) => {
         let f = r.includes('pixeldrain.com/') && !r.includes('/api/file/') ? r.replace('pixeldrain.com/u/', 'pixeldrain.com/api/file/') : r;
+        console.log("⏳ Starting Curl Download...");
         exec(`curl -L -s -k --connect-timeout 30 --max-time 600 --retry 3 -A "Mozilla/5.0" "${f}" -o "${d}"`, { maxBuffer: 1024 * 1024 * 1000, timeout: 600000 }, (err) => {
-            if (fs.existsSync(d) && fs.statSync(d).size > 1000000) res(true);
-            else rej(err || new Error("Download Failed"));
+            if (fs.existsSync(d) && fs.statSync(d).size > 1000000) {
+                const szMB = (fs.statSync(d).size / (1024 * 1024)).toFixed(2);
+                console.log(`✅ Download Finished! File Size: ${szMB} MB`);
+                res(true);
+            } else {
+                console.error("❌ Download Failed or file too small!");
+                rej(err || new Error("Download Failed"));
+            }
         });
     });
 };
 
-async function startBot() {
+async function startBot(isFreshStart = false) {
     cleanStorage();
+    if (isFreshStart) clearSessionFolder();
+
     try {
         const sessionFolder = './session';
-        const credsFile = path.join(sessionFolder, 'creds.json');
-
-        if (fs.existsSync(credsFile)) {
-            console.log("🔑 Existing session (creds.json) found! Connecting directly...");
-        } else {
-            console.log("ℹ️ Session file not found. Will generate Pairing Code...");
-        }
-
         const { state, saveCreds } = await useMultiFileAuthState(sessionFolder);
+
         const sock = makeWASocket({
             logger: pino({ level: 'silent' }),
             printQRInTerminal: false,
@@ -124,7 +137,7 @@ async function startBot() {
 
             if ((c === 'connecting' || !c) && !sock.authState.creds.registered && !pairingRequested) {
                 pairingRequested = true;
-                console.log('⏳ Requesting Pairing Code...');
+                console.log('⏳ Requesting Fresh Pairing Code...');
                 setTimeout(async () => {
                     try {
                         const n = PHONE_NUMBER.replace(/[^0-9]/g, '');
@@ -146,12 +159,15 @@ async function startBot() {
 
             if (c === 'close') {
                 const st = l?.error?.output?.statusCode;
-                if (st !== DisconnectReason.loggedOut && !reconnecting) {
+                if (st === DisconnectReason.loggedOut) {
+                    clearSessionFolder();
+                }
+                if (!reconnecting) {
                     reconnecting = true;
                     setTimeout(() => {
                         pairingRequested = false;
                         reconnecting = false;
-                        startBot();
+                        startBot(false);
                     }, 5000);
                 }
             }
@@ -249,13 +265,11 @@ async function startBot() {
 
                             if (!vDownloads.length) return sock.sendMessage(from, { text: "⚠️ සුදුසු (720p හෝ 480p) Download link එකක් හමු නොවීය." });
 
-                            // 720p සහ 480p Links සොයාගැනීම
                             const item720 = vDownloads.find(i => (i.quality || i.name || '').toLowerCase().includes('720'));
                             const item480 = vDownloads.find(i => (i.quality || i.name || '').toLowerCase().includes('480'));
 
                             let sObj = null;
 
-                            // 720p තිබේදැයි බලයි. එහි Size එක 2GB ට වඩා වැඩි නම් 480p එකට Switch වේ.
                             if (item720) {
                                 const size720 = parseSizeGB(item720.size);
                                 if (size720 > 2.0 && item480) {
@@ -270,7 +284,6 @@ async function startBot() {
                                 sObj = vDownloads[0];
                             }
 
-                            // තෝරාගත් Link එකේ Size එක 2GB පැනලා නම්
                             if (sObj && parseSizeGB(sObj.size) > 2.0) {
                                 return sock.sendMessage(from, { text: "⚠️ මෙම Movie එකෙහි 480p/720p දෙකම 2GB සීමාවට වඩා වැඩිය. WhatsApp එකට Upload කළ නොහැක." });
                             }
@@ -301,27 +314,33 @@ async function startBot() {
                             try {
                                 await downloadFileCurl(dlUrl, tPath);
 
-                                // ඩවුන්ලෝඩ් වුණු ෆයිල් එකේ ඇත්ත Size එක 2GB (2000MB) පැනලා නම් Cancel කිරීම
                                 const actualSizeMB = fs.statSync(tPath).size / (1024 * 1024);
+                                console.log(`📦 Actual File Size on Disk: ${actualSizeMB.toFixed(2)} MB`);
+
                                 if (actualSizeMB > 2000) {
                                     cleanStorage();
                                     return sock.sendMessage(from, { text: "⚠️ Download වුණු File එක 2GB වලට වඩා වැඩි නිසා WhatsApp එකට Upload කළ නොහැක." });
                                 }
 
+                                console.log("⬆️ Uploading document to WhatsApp...");
                                 const stUl = await sock.sendMessage(from, { text: "⬆️ *Upload වෙමින් පවතී...*" });
 
                                 const docMsg = "🎬 *MOVIE READY!* 🍿\n\n*" + mTitle + "*\n\n⭐ *IMDb*  " + imdbR + "\n🎞️ *Quality*  " + lQual + "\n📦 *Size*  " + fSize + "\n\n✅ Your movie is ready.\n🎥 Enjoy the movie!\n\n━━━━━━━━━━━━━━━━━━\n\n🤖 *SARA MOVIE BOT*\n👤 *Created by Imalsha Nethsara*";
 
                                 await sock.sendMessage(sendTargetJid, { document: { url: tPath }, fileName: cleanTitle.replace(/\s+/g, '_') + ".mp4", mimetype: 'video/mp4', caption: docMsg });
+                                console.log("✅ Document Upload Complete!");
+
                                 await safeDelete(sock, from, stUl.key);
 
                                 if (sendTargetJid !== from) await sock.sendMessage(from, { text: "✅ *Movie එක සාර්ථකව Group එකට යවන ලදී!*" });
                                 cleanStorage();
                             } catch (err) {
+                                console.error("❌ Download/Upload Error:", err);
                                 cleanStorage();
                                 await sock.sendMessage(from, { text: "⚠️ Download/Upload Error!" });
                             }
                         } catch (err) {
+                            console.error("❌ Info Error:", err);
                             await safeDelete(sock, from, stDl.key);
                             await sock.sendMessage(from, { text: "⚠️ Info Error!" });
                         }
@@ -337,4 +356,6 @@ async function startBot() {
 }
 
 setInterval(() => {}, 3600000);
-startBot();
+// Start fresh on every execution!
+startBot(true);
+
