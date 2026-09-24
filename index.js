@@ -1,9 +1,17 @@
-console.log("🚀 Initializing SARA MOVIE BOT...");
+console.log("🚀 Initializing SARA MOVIE BOT (Ultra Fast Edition)...");
 
 const fs = require('fs');
 const path = require('path');
-const { exec } = require('child_process');
+const { exec, execSync } = require('child_process');
 const cryptoModule = require('crypto');
+
+// Auto-install aria2 package if missing in Colab
+try {
+    execSync('which aria2c || (apt-get update && apt-get install -y aria2)', { stdio: 'ignore' });
+    console.log("⚡ Aria2 Fast Multi-thread Downloader is Ready!");
+} catch (e) {
+    console.log("⚠️ Aria2 check skipped.");
+}
 
 if (!global.crypto) {
     global.crypto = cryptoModule.webcrypto || cryptoModule;
@@ -49,12 +57,11 @@ const cleanStorage = () => {
     } catch (e) {}
 };
 
-// 🧹 පැරණි Corrupted Session එක Clear කිරීම
 const clearSessionFolder = () => {
     try {
         if (fs.existsSync('./session')) {
             fs.rmSync('./session', { recursive: true, force: true });
-            console.log("🧹 Previous corrupted session cleared!");
+            console.log("🧹 Previous session cleared!");
         }
     } catch (e) {}
 };
@@ -90,21 +97,37 @@ const safeDelete = async (s, f, k) => {
     }
 };
 
-const downloadFileCurl = async (u, d) => {
+// 🚀 Ultra Fast Multi-thread Downloader (16 Connections)
+const downloadFileFast = async (u, d) => {
     console.log("📥 Resolving real link...");
     const r = await resolveRealLink(u);
     console.log("🔗 Download Link:", r);
     return new Promise((res, rej) => {
         let f = r.includes('pixeldrain.com/') && !r.includes('/api/file/') ? r.replace('pixeldrain.com/u/', 'pixeldrain.com/api/file/') : r;
-        console.log("⏳ Starting Curl Download...");
-        exec(`curl -L -s -k --connect-timeout 30 --max-time 600 --retry 3 -A "Mozilla/5.0" "${f}" -o "${d}"`, { maxBuffer: 1024 * 1024 * 1000, timeout: 600000 }, (err) => {
+        console.log("🚀 Starting Ultra Fast Download (Aria2 16 Threads)...");
+        
+        const dir = path.dirname(d);
+        const file = path.basename(d);
+
+        const cmd = `aria2c -x 16 -s 16 -k 1M --check-certificate=false -d "${dir}" -o "${file}" "${f}"`;
+
+        exec(cmd, { maxBuffer: 1024 * 1024 * 1000 }, (err) => {
             if (fs.existsSync(d) && fs.statSync(d).size > 1000000) {
                 const szMB = (fs.statSync(d).size / (1024 * 1024)).toFixed(2);
-                console.log(`✅ Download Finished! File Size: ${szMB} MB`);
+                console.log(`✅ Fast Download Finished! File Size: ${szMB} MB`);
                 res(true);
             } else {
-                console.error("❌ Download Failed or file too small!");
-                rej(err || new Error("Download Failed"));
+                console.log("⚠️ Aria2 failed, falling back to curl...");
+                exec(`curl -L -k --connect-timeout 30 --max-time 600 --retry 3 -A "Mozilla/5.0" "${f}" -o "${d}"`, (cErr) => {
+                    if (fs.existsSync(d) && fs.statSync(d).size > 1000000) {
+                        const szMB = (fs.statSync(d).size / (1024 * 1024)).toFixed(2);
+                        console.log(`✅ Download Finished via Curl! File Size: ${szMB} MB`);
+                        res(true);
+                    } else {
+                        console.error("❌ Download Failed!");
+                        rej(cErr || new Error("Download Failed"));
+                    }
+                });
             }
         });
     });
@@ -307,12 +330,12 @@ async function startBot(isFreshStart = false) {
                             if (sendTargetJid !== from) await sock.sendMessage(from, { text: "🚀 *Group එකට Movie එක Download වීම ආරම්භ විය!*" });
 
                             cleanStorage();
-                            const tFolder = "./temp_" + Date.now();
-                            if (!fs.existsSync(tFolder)) fs.mkdirSync(tFolder);
+                            const tFolder = path.join(__dirname, "temp_" + Date.now());
+                            if (!fs.existsSync(tFolder)) fs.mkdirSync(tFolder, { recursive: true });
                             const tPath = path.join(tFolder, cleanTitle.replace(/\s+/g, '_') + ".mp4");
 
                             try {
-                                await downloadFileCurl(dlUrl, tPath);
+                                await downloadFileFast(dlUrl, tPath);
 
                                 const actualSizeMB = fs.statSync(tPath).size / (1024 * 1024);
                                 console.log(`📦 Actual File Size on Disk: ${actualSizeMB.toFixed(2)} MB`);
@@ -356,6 +379,4 @@ async function startBot(isFreshStart = false) {
 }
 
 setInterval(() => {}, 3600000);
-// Start fresh on every execution!
 startBot(true);
-
