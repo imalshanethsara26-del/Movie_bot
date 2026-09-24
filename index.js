@@ -1,4 +1,4 @@
-console.log("🚀 Initializing SARA MOVIE BOT (Ultra Fast Live Progress Edition)...");
+console.log("🚀 Initializing SARA MOVIE BOT (480p Priority + 20 Min Timeout Edition)...");
 
 const fs = require('fs');
 const path = require('path');
@@ -97,19 +97,18 @@ const safeDelete = async (s, f, k) => {
     }
 };
 
-// 🚀 Ultra Fast Multi-thread Downloader (16 Threads with Live Percentage)
 const downloadFileFast = async (u, d, sock, targetJid) => {
     console.log("📥 Resolving real link...");
     const r = await resolveRealLink(u);
     console.log("🔗 Download Link:", r);
 
     if (sock && targetJid) {
-        await sock.sendMessage(targetJid, { text: "📥 *Movie එක Colab එකට Download වීම ආරම්භ විය...*\n\n(Max Speed: 16 Threads Active 🚀)" });
+        await sock.sendMessage(targetJid, { text: "📥 *Movie එක Colab එකට Download වීම ආරම්භ විය...*\n\n(480p Light Weight Mode Enabled 🚀)" });
     }
 
     return new Promise((res, rej) => {
         let f = r.includes('pixeldrain.com/') && !r.includes('/api/file/') ? r.replace('pixeldrain.com/u/', 'pixeldrain.com/api/file/') : r;
-        console.log("\n🚀 Starting Ultra Fast Download (16 Threads - Progress below)...\n");
+        console.log("\n🚀 Starting Fast Download (16 Threads - Progress below)...\n");
 
         const dir = path.dirname(d);
         const file = path.basename(d);
@@ -164,8 +163,8 @@ async function startBot(isFreshStart = false) {
             auth: state,
             browser: ['Ubuntu', 'Chrome', '20.0.0.4'],
             markOnlineOnConnect: false,
-            mediaUploadTimeoutMs: 900000,
-            connectTimeoutMs: 60000,
+            mediaUploadTimeoutMs: 1200000, // 🎯 Upload Timeout එක විනාඩි 20 දක්වා වැඩි කරන ලදී (20 x 60 x 1000ms)
+            connectTimeoutMs: 1200000,
             keepAliveIntervalMs: 30000
         });
 
@@ -303,12 +302,14 @@ async function startBot(isFreshStart = false) {
                                 return !l.includes('telegram') && !l.includes('t.me') && !q.includes('telegram') && !q.includes('1080') && !q.includes('2160') && !q.includes('4k') && !q.includes('fhd');
                             });
 
-                            if (!vDownloads.length) return sock.sendMessage(from, { text: "⚠️ සුදුසු (720p හෝ 480p) Download link එකක් හමු නොවීය." });
+                            if (!vDownloads.length) return sock.sendMessage(from, { text: "⚠️ සුදුසු Download link එකක් හමු නොවීය." });
 
-                            const item720 = vDownloads.find(i => (i.quality || i.name || '').toLowerCase().includes('720'));
+                            // 🎯 480p එකට මුල් තැන ලබාදීම (480p නැත්නම් 360p, නැතිනම් 720p තෝරාගනී)
                             const item480 = vDownloads.find(i => (i.quality || i.name || '').toLowerCase().includes('480'));
+                            const item360 = vDownloads.find(i => (i.quality || i.name || '').toLowerCase().includes('360'));
+                            const item720 = vDownloads.find(i => (i.quality || i.name || '').toLowerCase().includes('720'));
 
-                            let sObj = item720 || item480 || vDownloads[0];
+                            let sObj = item480 || item360 || item720 || vDownloads[0];
 
                             if (sObj && parseSizeGB(sObj.size) > 2.0) {
                                 return sock.sendMessage(from, { text: "⚠️ මෙම Movie එක 2GB සීමාවට වඩා වැඩිය. WhatsApp එකට Upload කළ නොහැක." });
@@ -335,7 +336,6 @@ async function startBot(isFreshStart = false) {
                             const tPath = path.join(tFolder, cleanTitle.replace(/\s+/g, '_') + ".mp4");
 
                             try {
-                                // 🚀 Ultra Fast Download (16 Threads) with Live Progress
                                 await downloadFileFast(dlUrl, tPath, sock, sendTargetJid);
 
                                 const actualSizeMB = fs.statSync(tPath).size / (1024 * 1024);
