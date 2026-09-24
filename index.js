@@ -1,4 +1,4 @@
-console.log("🚀 Initializing SARA MOVIE BOT (Live Progress Edition)...");
+console.log("🚀 Initializing SARA MOVIE BOT (Ultra Fast Live Progress Edition)...");
 
 const fs = require('fs');
 const path = require('path');
@@ -97,27 +97,28 @@ const safeDelete = async (s, f, k) => {
     }
 };
 
-// 🚀 Terminal එකේ සජීවී ප්‍රතිශතය (Percentage) පෙන්වන Downloader එක
+// 🚀 Ultra Fast Multi-thread Downloader (16 Threads with Live Percentage)
 const downloadFileFast = async (u, d, sock, targetJid) => {
     console.log("📥 Resolving real link...");
     const r = await resolveRealLink(u);
     console.log("🔗 Download Link:", r);
 
     if (sock && targetJid) {
-        await sock.sendMessage(targetJid, { text: "📥 *Movie එක Colab එකට Download වීම ආරම්භ විය...*\n\n(කරුණාකර තත්පර කිහිපයක් රැඳී සිටින්න)" });
+        await sock.sendMessage(targetJid, { text: "📥 *Movie එක Colab එකට Download වීම ආරම්භ විය...*\n\n(Max Speed: 16 Threads Active 🚀)" });
     }
 
     return new Promise((res, rej) => {
         let f = r.includes('pixeldrain.com/') && !r.includes('/api/file/') ? r.replace('pixeldrain.com/u/', 'pixeldrain.com/api/file/') : r;
-        console.log("\n🚀 Starting Fast Download (Showing Progress below)...\n");
+        console.log("\n🚀 Starting Ultra Fast Download (16 Threads - Progress below)...\n");
 
         const dir = path.dirname(d);
         const file = path.basename(d);
 
         const args = [
-            '-x', '4',
-            '-s', '4',
-            '-k', '1M',
+            '-x', '16',
+            '-s', '16',
+            '-j', '16',
+            '--min-split-size=1M',
             '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
             '--check-certificate=false',
             '--summary-interval=1',
@@ -334,7 +335,7 @@ async function startBot(isFreshStart = false) {
                             const tPath = path.join(tFolder, cleanTitle.replace(/\s+/g, '_') + ".mp4");
 
                             try {
-                                // 🚀 Download ආරම්භ කිරීම සහ Live progress පෙන්වීම
+                                // 🚀 Ultra Fast Download (16 Threads) with Live Progress
                                 await downloadFileFast(dlUrl, tPath, sock, sendTargetJid);
 
                                 const actualSizeMB = fs.statSync(tPath).size / (1024 * 1024);
