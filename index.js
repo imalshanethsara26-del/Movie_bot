@@ -1,4 +1,4 @@
-console.log("🚀 Initializing SARA MOVIE BOT (480p Priority + 20 Min Timeout Edition)...");
+Console.log("🚀 Initializing SARA MOVIE BOT (720p Priority + Smart Fallback + Clean Edition)...");
 
 const fs = require('fs');
 const path = require('path');
@@ -45,12 +45,23 @@ const parseSizeGB = (sz) => {
     return 0;
 };
 
+// 🎯 Advanced Clean Storage Method
 const cleanStorage = () => {
     try {
+        const dirs = ['./', './session'];
         fs.readdirSync('./').forEach(f => {
             if (/\.(mp4|mkv|avi|tmp|part|download)$/i.test(f) || f.startsWith('temp_')) {
                 try {
                     fs.rmSync(path.join('./', f), { recursive: true, force: true });
+                } catch (e) {}
+            }
+        });
+        // Temp folders cleanup
+        const files = fs.readdirSync(__dirname);
+        files.forEach(file => {
+            if (file.startsWith('temp_')) {
+                try {
+                    fs.rmSync(path.join(__dirname, file), { recursive: true, force: true });
                 } catch (e) {}
             }
         });
@@ -97,13 +108,14 @@ const safeDelete = async (s, f, k) => {
     }
 };
 
-const downloadFileFast = async (u, d, sock, targetJid) => {
+const downloadFileFast = async (u, d, sock, inboxJid) => {
     console.log("📥 Resolving real link...");
     const r = await resolveRealLink(u);
     console.log("🔗 Download Link:", r);
 
-    if (sock && targetJid) {
-        await sock.sendMessage(targetJid, { text: "📥 *Movie එක Colab එකට Download වීම ආරම්භ විය...*\n\n(480p Light Weight Mode Enabled 🚀)" });
+    // 🎯 Status පණිවිඩය Inbox එකට යැවීම
+    if (sock && inboxJid) {
+        await sock.sendMessage(inboxJid, { text: "📥 *Movie එක Colab එකට Download වීම ආරම්භ විය...*\n\n(High Speed Fast Downloader Active 🚀)" });
     }
 
     return new Promise((res, rej) => {
@@ -163,7 +175,7 @@ async function startBot(isFreshStart = false) {
             auth: state,
             browser: ['Ubuntu', 'Chrome', '20.0.0.4'],
             markOnlineOnConnect: false,
-            mediaUploadTimeoutMs: 1200000, // 🎯 Upload Timeout එක විනාඩි 20 දක්වා වැඩි කරන ලදී (20 x 60 x 1000ms)
+            mediaUploadTimeoutMs: 1200000,
             connectTimeoutMs: 1200000,
             keepAliveIntervalMs: 30000
         });
@@ -224,7 +236,7 @@ async function startBot(isFreshStart = false) {
                 const cmd = text.trim();
 
                 if (cmd.toLowerCase() === '.jid') {
-                    return sock.sendMessage(from, { text: "📌 *මෙම Chat / Group එකෙහි JID එක:*\n\n`" + from + "`" });
+                    return sock.sendMessage(from, { text: "📌 *මෙම Chat / Group එකෙහි JID එකකරු:*\n\n`" + from + "`" });
                 }
 
                 const isGroupCmd = cmd.toLowerCase().startsWith('.movieg') || cmd.toLowerCase().startsWith('.subg') || cmd.toLowerCase().startsWith('.sinhalasubg') || cmd.toLowerCase().startsWith('.csg');
@@ -250,7 +262,7 @@ async function startBot(isFreshStart = false) {
                         results.forEach((item, i) => {
                             list += "*" + (i + 1) + ".* 🎬 " + (item.title || 'Movie') + "\n";
                         });
-                        list += "\n📌 *අංකය එවන්න (1-" + results.length + ")*" + (isGroupCmd ? "\n🎯 *ලැබෙන ස්ථානය:* Group එකට" : "") + "\n\n👤 Created by Imalsha Nethsara";
+                        list += "\n📌 *අංකය එවන්න (1-" + results.length + ")*" + (isGroupCmd ? "\n🎯 *රැගෙන යන ස්ථානය:* Group එකට" : "") + "\n\n👤 Created by Imalsha Nethsara";
 
                         await sock.sendMessage(from, { text: list });
                     } catch (err) {
@@ -299,20 +311,35 @@ async function startBot(isFreshStart = false) {
                             const vDownloads = dList.filter(i => {
                                 const l = (i.link || '').toLowerCase();
                                 const q = (i.quality || i.name || '').toLowerCase();
-                                return !l.includes('telegram') && !l.includes('t.me') && !q.includes('telegram') && !q.includes('1080') && !q.includes('2160') && !q.includes('4k') && !q.includes('fhd');
+                                return !l.includes('telegram') && !l.includes('t.me') && !q.includes('telegram') && !q.includes('2160') && !q.includes('4k');
                             });
 
                             if (!vDownloads.length) return sock.sendMessage(from, { text: "⚠️ සුදුසු Download link එකක් හමු නොවීය." });
 
-                            // 🎯 480p එකට මුල් තැන ලබාදීම (480p නැත්නම් 360p, නැතිනම් 720p තෝරාගනී)
-                            const item480 = vDownloads.find(i => (i.quality || i.name || '').toLowerCase().includes('480'));
-                            const item360 = vDownloads.find(i => (i.quality || i.name || '').toLowerCase().includes('360'));
-                            const item720 = vDownloads.find(i => (i.quality || i.name || '').toLowerCase().includes('720'));
+                            // 🎯 720p වලට මුල් තැන දීම, 720p නැත්නම් 480p හෝ වෙනත් එකක් තෝරාගැනීම
+                            let item720 = vDownloads.find(i => (i.quality || i.name || '').toLowerCase().includes('720'));
+                            let item480 = vDownloads.find(i => (i.quality || i.name || '').toLowerCase().includes('480'));
+                            let item360 = vDownloads.find(i => (i.quality || i.name || '').toLowerCase().includes('360'));
 
-                            let sObj = item480 || item360 || item720 || vDownloads[0];
+                            let sObj = item720 || item480 || item360 || vDownloads[0];
 
+                            // 🎯 720p එකේ සයිස් එක 2GB වලට වඩා වැඩියි නම්, ස්වයංක්‍රීයව 480p (හෝ ඊට අඩු එකකට) මාරු වීම
                             if (sObj && parseSizeGB(sObj.size) > 2.0) {
-                                return sock.sendMessage(from, { text: "⚠️ මෙම Movie එක 2GB සීමාවට වඩා වැඩිය. WhatsApp එකට Upload කළ නොහැක." });
+                                console.log("⚠️ Selected quality exceeds 2GB. Smart fallback to 480p...");
+                                if (item480) {
+                                    sObj = item480;
+                                } else if (item360) {
+                                    sObj = item360;
+                                } else {
+                                    // වෙනත් කුඩා ලින්ක් එකක් ඇත්දැයි බැලීම
+                                    const smallerOne = vDownloads.find(i => parseSizeGB(i.size) <= 2.0);
+                                    if (smallerOne) sObj = smallerOne;
+                                }
+                            }
+
+                            // අවසාන පරීක්ෂාව: තවමත් 2GB වලට වඩා වැඩියි නම් මැසේජ් එකක් පෙන්වීම
+                            if (sObj && parseSizeGB(sObj.size) > 2.0) {
+                                return sock.sendMessage(from, { text: "⚠️ මෙම Movie එකේ ඇති සියලුම ප්‍රමාණයන් 2GB සීමාව ඉක්මවයි. WhatsApp එකට Upload කළ නොහැක." });
                             }
 
                             const dlUrl = sObj.link;
@@ -336,7 +363,8 @@ async function startBot(isFreshStart = false) {
                             const tPath = path.join(tFolder, cleanTitle.replace(/\s+/g, '_') + ".mp4");
 
                             try {
-                                await downloadFileFast(dlUrl, tPath, sock, sendTargetJid);
+                                // 🎯 ඩවුන්ලෝඩ් වෙමින් පවතින බවට පණිවිඩය භාවිත කරන්නාගේ Inbox එකට පමණක් යැවීම
+                                await downloadFileFast(dlUrl, tPath, sock, from);
 
                                 const actualSizeMB = fs.statSync(tPath).size / (1024 * 1024);
 
@@ -346,14 +374,15 @@ async function startBot(isFreshStart = false) {
                                 }
 
                                 console.log("⬆️ Uploading document to WhatsApp...");
-                                const stUl = await sock.sendMessage(sendTargetJid, { text: "⬆️ *Colab එකෙන් WhatsApp එකට Upload වෙමින් පවතී...*" });
+                                // 🎯 අප්ලෝඩ් වෙමින් පවතින බවට පණිවිඩය භාවිත කරන්නාගේ Inbox එකට පමණක් යැවීම
+                                const stUl = await sock.sendMessage(from, { text: "⬆️ *Colab එකෙන් WhatsApp එකට Upload වෙමින් පවතී...*" });
 
                                 const docMsg = "🎬 *MOVIE READY!* 🍿\n\n*" + mTitle + "*\n\n⭐ *IMDb*  " + imdbR + "\n🎞️ *Quality*  " + lQual + "\n📦 *Size*  " + fSize + "\n\n✅ Enjoy the movie!\n\n━━━━━━━━━━━━━━━━━━\n\n🤖 *SARA MOVIE BOT*\n👤 *Created by Imalsha Nethsara*";
 
                                 await sock.sendMessage(sendTargetJid, { document: { url: tPath }, fileName: cleanTitle.replace(/\s+/g, '_') + ".mp4", mimetype: 'video/mp4', caption: docMsg });
                                 console.log("✅ Document Upload Complete!");
 
-                                await safeDelete(sock, sendTargetJid, stUl.key);
+                                await safeDelete(sock, from, stUl.key);
                                 cleanStorage();
                             } catch (err) {
                                 console.error("❌ Download/Upload Error:", err);
