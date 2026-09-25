@@ -1,4 +1,4 @@
-Console.log("🚀 Initializing SARA MOVIE BOT (720p Priority + Smart Fallback + Clean Edition)...");
+console.log("🚀 Initializing SARA MOVIE BOT (720p Priority + Smart Fallback + Clean Edition)...");
 
 const fs = require('fs');
 const path = require('path');
