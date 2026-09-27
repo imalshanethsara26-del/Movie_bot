@@ -1,11 +1,11 @@
-console.log("🚀 Initializing SARA MOVIE BOT (CineSubz API Edition)...");
+console.log("🚀 Initializing SARA MOVIE BOT (SinhalaSub & CineSubz API Edition)...");
 
 const fs = require('fs');
 const path = require('path');
 const { spawn, execSync } = require('child_process');
 const cryptoModule = require('crypto');
 
-// Auto-install aria2 package if missing in Colab
+// Auto-install aria2 package if missing in Colab / Linux
 try {
     execSync('which aria2c || (apt-get update && apt-get install -y aria2)', { stdio: 'ignore' });
     console.log("⚡ Aria2 Fast Downloader is Ready!");
@@ -21,10 +21,14 @@ const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = requi
 const pino = require('pino');
 const axios = require('axios');
 
-// Configurations & Chamindu CineSubz API Credentials
+// Configurations & API Credentials
 const PHONE_NUMBER = process.env.PHONE_NUMBER || "94740196225";
 const API_KEY = process.env.API_KEY || "chama_api_5dc8403e460b74f6f8eda19f55746e08";
+
+// API Base URLs
 const CINESUBZ_BASE_URL = "https://api.chamindu.site/api/v1/movies/cinesubz";
+const SINHALASUB_BASE_URL = "https://sinhalasubapi-production.up.railway.app";
+
 const TARGET_GROUP_JID = process.env.TARGET_GROUP_JID || "120363410997296034@g.us";
 const HEADERS = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' };
 
@@ -46,7 +50,7 @@ const parseSizeGB = (sz) => {
     return 0;
 };
 
-// 🎯 Storage Cleanup Method
+// Storage Cleanup Method
 const cleanStorage = () => {
     try {
         fs.readdirSync('./').forEach(f => {
@@ -108,7 +112,7 @@ const downloadFileFast = async (u, d, sock, inboxJid) => {
     console.log("🔗 Resolved Link:", r);
 
     if (sock && inboxJid) {
-        await sock.sendMessage(inboxJid, { text: "📥 *Movie එක Colab එකට Download වීම ආරම්භ විය...*\n\n(High Speed Fast Downloader Active 🚀)" });
+        await sock.sendMessage(inboxJid, { text: "📥 *Movie එක Download වීම ආරම්භ විය...*\n\n(High Speed Fast Downloader Active 🚀)" });
     }
 
     return new Promise((res, rej) => {
@@ -133,13 +137,8 @@ const downloadFileFast = async (u, d, sock, inboxJid) => {
 
         const child = spawn('aria2c', args);
 
-        child.stdout.on('data', (data) => {
-            process.stdout.write(data.toString());
-        });
-
-        child.stderr.on('data', (data) => {
-            process.stderr.write(data.toString());
-        });
+        child.stdout.on('data', (data) => process.stdout.write(data.toString()));
+        child.stderr.on('data', (data) => process.stderr.write(data.toString()));
 
         child.on('close', (code) => {
             if (code === 0 && fs.existsSync(d) && fs.statSync(d).size > 1000000) {
@@ -198,7 +197,7 @@ async function startBot(isFreshStart = false) {
 
             if (c === 'open') {
                 reconnecting = false;
-                console.log('\n✅ SARA MOVIE BOT ONLINE (CINE SUBZ)!\n');
+                console.log('\n✅ SARA MOVIE BOT ONLINE (SinhalaSub & CineSubz)!\n');
             }
 
             if (c === 'close') {
@@ -232,37 +231,90 @@ async function startBot(isFreshStart = false) {
                     return sock.sendMessage(from, { text: "📌 *මෙම Chat / Group එකෙහි JID එක:* \n\n`" + from + "`" });
                 }
 
-                const isGroupCmd = cmd.toLowerCase().startsWith('.movieg') || cmd.toLowerCase().startsWith('.subg') || cmd.toLowerCase().startsWith('.sinhalasubg') || cmd.toLowerCase().startsWith('.csg');
-                const isNormalCmd = cmd.toLowerCase().startsWith('.movie') || cmd.toLowerCase().startsWith('.sub') || cmd.toLowerCase().startsWith('.sinhalasub') || cmd.toLowerCase().startsWith('.cs');
+                // Command Identifiers
+                const isSinhalaSubGroup = cmd.toLowerCase().startsWith('.movieg') || cmd.toLowerCase().startsWith('.subg');
+                const isSinhalaSubNormal = !isSinhalaSubGroup && (cmd.toLowerCase().startsWith('.movie') || cmd.toLowerCase().startsWith('.sub'));
 
-                // 🎯 1. Movie Search
-                if (isGroupCmd || isNormalCmd) {
-                    const q = cmd.replace(/^\.(movieg|subg|sinhalasubg|csg|movie|sub|sinhalasub|cs)\s*/i, '').trim();
-                    if (!q) return sock.sendMessage(from, { text: "🎬 *SARA MOVIE BOT (CINESUBZ)*\n\n📌 *Inbox එකට:* .sub <නම>\n📌 *Group එකට:* .subg <නම>\n\n👤 Created by Imalsha Nethsara" });
+                const isCineSubzGroup = cmd.toLowerCase().startsWith('.cing') || cmd.toLowerCase().startsWith('.csg');
+                const isCineSubzNormal = !isCineSubzGroup && (cmd.toLowerCase().startsWith('.cin') || cmd.toLowerCase().startsWith('.cs'));
 
-                    const sw = await sock.sendMessage(from, { text: "🔎 *CineSubz හි සොයමින් පවතී...*" });
+                // 🎯 Movie Search Routing
+                if (isSinhalaSubGroup || isSinhalaSubNormal || isCineSubzGroup || isCineSubzNormal) {
+                    let q = "";
+                    let apiSource = "";
+                    let isGroupCmd = false;
+
+                    if (isSinhalaSubGroup || isSinhalaSubNormal) {
+                        apiSource = "sinhalasub";
+                        isGroupCmd = isSinhalaSubGroup;
+                        q = cmd.replace(/^\.(movieg|subg|movie|sub)\s*/i, '').trim();
+                    } else if (isCineSubzGroup || isCineSubzNormal) {
+                        apiSource = "cinesubz";
+                        isGroupCmd = isCineSubzGroup;
+                        q = cmd.replace(/^\.(cing|csg|cin|cs)\s*/i, '').trim();
+                    }
+
+                    if (!q) {
+                        return sock.sendMessage(from, { 
+                            text: "🎬 *SARA MOVIE BOT COMMANDS*\n\n" +
+                                  "🔹 *SinhalaSub (Inbox):* .sub <නම> / .movie <නම>\n" +
+                                  "🔹 *SinhalaSub (Group):* .subg <නම> / .movieg <නම>\n\n" +
+                                  "🔸 *CineSubz (Inbox):* .cin <නම> / .cs <නම>\n" +
+                                  "🔸 *CineSubz (Group):* .cing <නම> / .csg <නම>\n\n" +
+                                  "👤 Created by Imalsha Nethsara" 
+                        });
+                    }
+
+                    const providerName = apiSource === "sinhalasub" ? "SinhalaSub" : "CineSubz";
+                    const sw = await sock.sendMessage(from, { text: `🔎 *${providerName} හි සොයමින් පවතී...*` });
+
                     try {
-                        const searchUrl = `${CINESUBZ_BASE_URL}/search?q=${encodeURIComponent(q)}&api_key=${API_KEY}`;
-                        const res = await axios.get(searchUrl, { headers: HEADERS, timeout: 60000 });
-                        
-                        const results = (res?.data?.data && Array.isArray(res.data.data)) ? res.data.data.slice(0, 10) : [];
+                        let searchUrl = "";
+                        if (apiSource === "cinesubz") {
+                            searchUrl = `${CINESUBZ_BASE_URL}/search?q=${encodeURIComponent(q)}&api_key=${API_KEY}`;
+                        } else {
+                            searchUrl = `${SINHALASUB_BASE_URL}/api/search?q=${encodeURIComponent(q)}`;
+                        }
+
+                        let res;
+                        try {
+                            res = await axios.get(searchUrl, { headers: HEADERS, timeout: 45000 });
+                        } catch (err) {
+                            if (apiSource === "sinhalasub") {
+                                // Fallback path for SinhalaSub endpoint if structured differently
+                                searchUrl = `${SINHALASUB_BASE_URL}/search?q=${encodeURIComponent(q)}`;
+                                res = await axios.get(searchUrl, { headers: HEADERS, timeout: 45000 });
+                            } else {
+                                throw err;
+                            }
+                        }
+
+                        const rawData = res?.data || {};
+                        const resultsList = rawData.data || rawData.result || rawData.results || (Array.isArray(rawData) ? rawData : []);
+                        const results = Array.isArray(resultsList) ? resultsList.slice(0, 10) : [];
 
                         await safeDelete(sock, from, sw.key);
 
-                        if (!results.length) return sock.sendMessage(from, { text: "❌ සෙවුම් ප්‍රතිඵල හමු නොවීය." });
+                        if (!results.length) return sock.sendMessage(from, { text: `❌ ${providerName} හි සෙවුම් ප්‍රතිඵල හමු නොවීය.` });
 
-                        userSessions[from] = { type: 'movie_search', results: results, toGroup: isGroupCmd };
+                        userSessions[from] = { 
+                            type: 'movie_search', 
+                            apiSource: apiSource, 
+                            results: results, 
+                            toGroup: isGroupCmd 
+                        };
 
-                        let list = "🎬 *SARA MOVIE BOT - CINESUBZ*\n\n";
+                        let list = `🎬 *SARA MOVIE BOT - ${providerName.toUpperCase()}*\n\n`;
                         results.forEach((item, i) => {
-                            list += "*" + (i + 1) + ".* 🎬 " + (item.title || 'Movie') + "\n";
+                            const itemTitle = item.title || item.movie_name || 'Movie';
+                            list += "*" + (i + 1) + ".* 🎬 " + itemTitle + "\n";
                         });
-                        list += "\n📌 *අංකය එවන්න (1-" + results.length + ")*" + (isGroupCmd ? "\n🎯 *රැගෙන යන ස්ථානය:* Group එකට" : "") + "\n\n👤 Created by Imalsha Nethsara";
+                        list += "\n📌 *අංකය එවන්න (1-" + results.length + ")*" + (isGroupCmd ? "\n🎯 *රැගෙන යන ස්ථානය:* Group එකට" : "\n🎯 *රැගෙන යන ස්ථානය:* Inbox එකට") + "\n\n👤 Created by Imalsha Nethsara";
 
                         await sock.sendMessage(from, { text: list });
                     } catch (err) {
                         await safeDelete(sock, from, sw.key);
-                        await sock.sendMessage(from, { text: "⚠️ Search Error! CineSubz API එක පරීක්ෂා කරන්න." });
+                        await sock.sendMessage(from, { text: `⚠️ Search Error! ${providerName} API එක පරීක්ෂා කරන්න.` });
                     }
                     return;
                 }
@@ -276,8 +328,8 @@ async function startBot(isFreshStart = false) {
                         if (idx < 0 || idx >= session.results.length) return sock.sendMessage(from, { text: "❌ වලංගු අංකයක් තෝරන්න." });
 
                         const item = session.results[idx];
-                        const targetUrl = item.link || item.url;
-                        const title = item.title || 'Selected Movie';
+                        const targetUrl = item.link || item.url || item.id;
+                        const title = item.title || item.movie_name || 'Selected Movie';
                         const cleanTitle = title.replace(/[^a-zA-Z0-9 ]/g, '').trim();
 
                         let sendTargetJid = from;
@@ -289,41 +341,57 @@ async function startBot(isFreshStart = false) {
                             }
                         }
 
+                        const apiSource = session.apiSource;
                         delete userSessions[from];
+
                         const stDl = await sock.sendMessage(from, { text: "⚡ *Details පරීක්ෂා කරමින් පවතී...*" });
 
                         try {
-                            const infoUrl = `${CINESUBZ_BASE_URL}/infodl?q=${encodeURIComponent(targetUrl)}&api_key=${API_KEY}`;
-                            const res = await axios.get(infoUrl, { headers: HEADERS, timeout: 90000 });
+                            let infoUrl = "";
+                            if (apiSource === "cinesubz") {
+                                infoUrl = `${CINESUBZ_BASE_URL}/infodl?q=${encodeURIComponent(targetUrl)}&api_key=${API_KEY}`;
+                            } else {
+                                infoUrl = `${SINHALASUB_BASE_URL}/api/movie?url=${encodeURIComponent(targetUrl)}`;
+                            }
+
+                            let res;
+                            try {
+                                res = await axios.get(infoUrl, { headers: HEADERS, timeout: 90000 });
+                            } catch (err) {
+                                if (apiSource === "sinhalasub") {
+                                    infoUrl = `${SINHALASUB_BASE_URL}/movie?url=${encodeURIComponent(targetUrl)}`;
+                                    res = await axios.get(infoUrl, { headers: HEADERS, timeout: 90000 });
+                                } else {
+                                    throw err;
+                                }
+                            }
+
                             await safeDelete(sock, from, stDl.key);
 
-                            const rData = res?.data?.data || {};
+                            const rData = res?.data?.data || res?.data?.result || res?.data || {};
                             const mTitle = (rData.title || title).replace(/Sinhala Subtitles|සිංහල උපසිරැසි|සමඟ/gi, '').trim();
                             const imdbR = rData.imdb || rData.rating || 'N/A';
-                            const plot = (rData.story || 'තොරතුරු නොමැත.').replace(/<[^>]*>?/gm, '').trim();
-                            const posterUrl = rData.image || item.image;
-                            const dList = rData.downloads || [];
+                            const plot = (rData.story || rData.description || rData.plot || 'තොරතුරු නොමැත.').replace(/<[^>]*>?/gm, '').trim();
+                            const posterUrl = rData.image || rData.img || rData.poster || item.image;
+                            const dList = rData.downloads || rData.dl_links || rData.downloadLinks || [];
 
-                            // Telegram links ඉවත් කිරීම
+                            // Telegram Links ඉවත් කිරීම
                             const vDownloads = dList.filter(i => {
-                                const l = (i.link || '').toLowerCase();
+                                const l = (i.link || i.url || '').toLowerCase();
                                 const q = (i.quality || '').toLowerCase();
                                 return !l.includes('telegram') && !l.includes('t.me') && !q.includes('telegram');
                             });
 
                             if (!vDownloads.length) return sock.sendMessage(from, { text: "⚠️ සුදුසු Download link එකක් හමු නොවීය." });
 
-                            // 🎯 Priority Quality Selection Algorithm:
-                            // 1. 720p 
-                            // 2. 480p 
-                            // 3. 360p or other links
+                            // Priority Quality Selection Algorithm: 720p -> 480p -> 360p
                             let item720 = vDownloads.find(i => (i.quality || '').toLowerCase().includes('720'));
                             let item480 = vDownloads.find(i => (i.quality || '').toLowerCase().includes('480'));
                             let item360 = vDownloads.find(i => (i.quality || '').toLowerCase().includes('360'));
 
                             let sObj = item720 || item480 || item360 || vDownloads[0];
 
-                            // 🎯 2GB ලිමිට් එකට වැඩි නම් Smart Fallback කිරීම
+                            // 2GB Limit Fallback Logic
                             if (sObj && parseSizeGB(sObj.size) > 2.0) {
                                 console.log("⚠️ Selected quality exceeds 2GB. Smart fallback to lower quality...");
                                 if (item480 && parseSizeGB(item480.size) <= 2.0) {
@@ -340,11 +408,11 @@ async function startBot(isFreshStart = false) {
                                 return sock.sendMessage(from, { text: "⚠️ මෙම Movie එකේ ඇති සියලුම ප්‍රමාණයන් 2GB සීමාව ඉක්මවයි. WhatsApp එකට Upload කළ නොහැක." });
                             }
 
-                            const dlUrl = sObj.link;
+                            const dlUrl = sObj.link || sObj.url;
                             const lQual = sObj.quality || 'Auto Quality';
                             const fSize = sObj.size || 'N/A';
 
-                            const tMsg = "🎬 *" + mTitle.toUpperCase() + "*\n\n⭐ *IMDb*  •  " + imdbR + "\n🎞️ *Quality*  •  " + lQual + "\n📦 *Size*  •  " + fSize + "\n\n📝 *STORY*\n" + plot + "\n\n━━━━━━━━━━━━━━━━━━\n\n🎞️ *SARA MOVIE BOT*\n👤 *Created by Imalsha Nethsara*";
+                            const tMsg = "🎬 *" + mTitle.toUpperCase() + "*\n\n⭐ *IMDb*  •  " + imdbR + "\n🎞️ *Quality*  •  " + lQual + "\n📦 *Size*  •  " + fSize + "\n🌐 *Source*  •  " + (apiSource === 'sinhalasub' ? 'SinhalaSub' : 'CineSubz') + "\n\n📝 *STORY*\n" + plot + "\n\n━━━━━━━━━━━━━━━━━━\n\n🎞️ *SARA MOVIE BOT*\n👤 *Created by Imalsha Nethsara*";
 
                             try {
                                 if (posterUrl) await sock.sendMessage(sendTargetJid, { image: { url: posterUrl }, caption: tMsg });
@@ -371,11 +439,16 @@ async function startBot(isFreshStart = false) {
                                 }
 
                                 console.log("⬆️ Uploading document to WhatsApp...");
-                                const stUl = await sock.sendMessage(from, { text: "⬆️ *Colab එකෙන් WhatsApp එකට Upload වෙමින් පවතී...*" });
+                                const stUl = await sock.sendMessage(from, { text: "⬆️ *WhatsApp එකට Upload වෙමින් පවතී...*" });
 
                                 const docMsg = "🎬 *MOVIE READY!* 🍿\n\n*" + mTitle + "*\n\n⭐ *IMDb*  " + imdbR + "\n🎞️ *Quality*  " + lQual + "\n📦 *Size*  " + fSize + "\n\n✅ Enjoy the movie!\n\n━━━━━━━━━━━━━━━━━━\n\n🤖 *SARA MOVIE BOT*\n👤 *Created by Imalsha Nethsara*";
 
-                                await sock.sendMessage(sendTargetJid, { document: { url: tPath }, fileName: cleanTitle.replace(/\s+/g, '_') + ".mp4", mimetype: 'video/mp4', caption: docMsg });
+                                await sock.sendMessage(sendTargetJid, { 
+                                    document: { url: tPath }, 
+                                    fileName: cleanTitle.replace(/\s+/g, '_') + ".mp4", 
+                                    mimetype: 'video/mp4', 
+                                    caption: docMsg 
+                                });
                                 console.log("✅ Document Upload Complete!");
 
                                 await safeDelete(sock, from, stUl.key);
@@ -388,7 +461,7 @@ async function startBot(isFreshStart = false) {
                         } catch (err) {
                             console.error("❌ Info Error:", err);
                             await safeDelete(sock, from, stDl.key);
-                            await sock.sendMessage(from, { text: "⚠️ Info Error!" });
+                            await sock.sendMessage(from, { text: "⚠️ Info Fetch Error!" });
                         }
                     }
                 }
