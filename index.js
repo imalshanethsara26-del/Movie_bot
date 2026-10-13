@@ -1,4 +1,4 @@
-console.log("🚀 Initializing SARA MOVIE BOT (SinhalaSub + Cinesubz Dual Support)...");
+console.log("🚀 Initializing SARA MOVIE BOT (CineSubz Exclusive)...");
 
 const fs = require('fs');
 const path = require('path');
@@ -23,9 +23,7 @@ const axios = require('axios');
 
 // Configurations
 const PHONE_NUMBER = process.env.PHONE_NUMBER || "94740196225";
-const BASE_URL = process.env.BASE_URL || "https://sinhalasubapi-production.up.railway.app";
-const CINESUBZ_API_KEY = process.env.CINESUBZ_API_KEY || "chama_api_5dc8403e460b74f6f8eda19f55746e08";
-const CINESUBZ_BASE_URL = "https://api.chamindu.site/api/v1/movies/cinesubz";
+const BASE_URL = process.env.BASE_URL || "https://cinesubzapi-production.up.railway.app";
 const TARGET_GROUP_JID = process.env.TARGET_GROUP_JID || "120363410997296034@g.us";
 const HEADERS = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' };
 
@@ -119,7 +117,7 @@ const downloadFileFast = async (u, d, sock, inboxJid) => {
     console.log("🔗 Download Link:", r);
 
     if (sock && inboxJid) {
-        await sock.sendMessage(inboxJid, { text: "📥 *Movie එක Colab එකට Download වීම ආරම්භ විය...*\n\n(High Speed Fast Downloader Active 🚀)" });
+        await sock.sendMessage(inboxJid, { text: "📥 *Movie එක Download වීම ආරම්භ විය...*\n\n(High Speed Fast Downloader Active 🚀)" });
     }
 
     return new Promise((res, rej) => {
@@ -209,7 +207,7 @@ async function startBot(isFreshStart = false) {
 
             if (c === 'open') {
                 reconnecting = false;
-                console.log('\n✅ SARA MOVIE BOT ONLINE!\n');
+                console.log('\n✅ SARA MOVIE BOT ONLINE (CineSubz)!\n');
             }
 
             if (c === 'close') {
@@ -243,65 +241,46 @@ async function startBot(isFreshStart = false) {
                     return sock.sendMessage(from, { text: "📌 *මෙම Chat / Group එකෙහි JID අංකය:*\n\n`" + from + "`" });
                 }
 
-                // Command Identification Logic
-                let provider = null;
+                // Command Identification Logic (CineSubz Only)
                 let isGroupCmd = false;
                 let q = '';
 
                 if (/^\.(csg|cinesubzg)\b/i.test(cmd)) {
-                    provider = 'cinesubz';
                     isGroupCmd = true;
                     q = cmd.replace(/^\.(csg|cinesubzg)\s*/i, '').trim();
                 } else if (/^\.(cs|cinesubz)\b/i.test(cmd)) {
-                    provider = 'cinesubz';
                     isGroupCmd = false;
                     q = cmd.replace(/^\.(cs|cinesubz)\s*/i, '').trim();
-                } else if (/^\.(subg|sinhalasubg|movieg)\b/i.test(cmd)) {
-                    provider = 'sinhalasub';
-                    isGroupCmd = true;
-                    q = cmd.replace(/^\.(subg|sinhalasubg|movieg)\s*/i, '').trim();
-                } else if (/^\.(sub|sinhalasub|movie)\b/i.test(cmd)) {
-                    provider = 'sinhalasub';
-                    isGroupCmd = false;
-                    q = cmd.replace(/^\.(sub|sinhalasub|movie)\s*/i, '').trim();
                 }
 
-                if (provider) {
+                if (/^\.(csg|cinesubzg|cs|cinesubz)\b/i.test(cmd)) {
                     if (!q) {
                         return sock.sendMessage(from, { 
-                            text: "🎬 *SARA MOVIE BOT*\n\n" +
-                                  "📌 *SinhalaSub (Inbox):* .sub <නම>\n" +
-                                  "📌 *SinhalaSub (Group):* .subg <නම>\n" +
+                            text: "🎬 *SARA MOVIE BOT (CineSubz)*\n\n" +
                                   "📌 *Cinesubz (Inbox):* .cs <නම>\n" +
                                   "📌 *Cinesubz (Group):* .csg <නම>\n\n" +
                                   "👤 Created by Imalsha Nethsara" 
                         });
                     }
 
-                    const sw = await sock.sendMessage(from, { text: `🔎 *[${provider.toUpperCase()}] හි සොයමින් පවතී...*` });
+                    const sw = await sock.sendMessage(from, { text: `🔎 *[CINESUBZ] හි සොයමින් පවතී...*` });
                     try {
-                        let searchUrl = '';
-                        if (provider === 'cinesubz') {
-                            searchUrl = `${CINESUBZ_BASE_URL}/search?q=${encodeURIComponent(q)}&api_key=${CINESUBZ_API_KEY}`;
-                        } else {
-                            searchUrl = `${BASE_URL}/api/v1/sinhalasub/search?q=${encodeURIComponent(q)}`;
-                        }
+                        const searchUrl = `${BASE_URL}/api/v1/cinesubz/search?q=${encodeURIComponent(q)}`;
 
                         const res = await axios.get(searchUrl, { headers: HEADERS, timeout: 60000 });
                         const results = parseArr(res).slice(0, 10);
 
                         await safeDelete(sock, from, sw.key);
 
-                        if (!results.length) return sock.sendMessage(from, { text: `❌ [${provider.toUpperCase()}] හි සෙවුම් ප්‍රතිඵල හමු නොවීය.` });
+                        if (!results.length) return sock.sendMessage(from, { text: `❌ [CINESUBZ] හි සෙවුම් ප්‍රතිඵල හමු නොවීය.` });
 
                         userSessions[from] = { 
                             type: 'movie_search', 
-                            provider: provider, 
                             results: results, 
                             toGroup: isGroupCmd 
                         };
 
-                        let list = `🎬 *SARA MOVIE BOT - ${provider.toUpperCase()}*\n\n`;
+                        let list = `🎬 *SARA MOVIE BOT - CINESUBZ*\n\n`;
                         results.forEach((item, i) => {
                             const title = item.title || item.name || 'Movie';
                             list += `*${i + 1}.* 🎬 ${title}\n`;
@@ -328,7 +307,6 @@ async function startBot(isFreshStart = false) {
                         const targetUrl = item.link || item.url || item.href;
                         const title = item.title || item.name || 'Selected Movie';
                         const cleanTitle = title.replace(/[^a-zA-Z0-9 ]/g, '').trim();
-                        const currentProvider = session.provider || 'sinhalasub';
 
                         let sendTargetJid = from;
                         if (session.toGroup) {
@@ -340,15 +318,10 @@ async function startBot(isFreshStart = false) {
                         }
 
                         delete userSessions[from];
-                        const stDl = await sock.sendMessage(from, { text: `⚡ *[${currentProvider.toUpperCase()}] Details පරීක්ෂා කරමින් පවතී...*` });
+                        const stDl = await sock.sendMessage(from, { text: `⚡ *[CINESUBZ] Details පරීක්ෂා කරමින් පවතී...*` });
 
                         try {
-                            let infoUrl = '';
-                            if (currentProvider === 'cinesubz') {
-                                infoUrl = `${CINESUBZ_BASE_URL}/infodl?q=${encodeURIComponent(targetUrl)}&api_key=${CINESUBZ_API_KEY}`;
-                            } else {
-                                infoUrl = `${BASE_URL}/api/v1/sinhalasub/infodl?url=${encodeURIComponent(targetUrl)}`;
-                            }
+                            const infoUrl = `${BASE_URL}/api/v1/cinesubz/infodl?url=${encodeURIComponent(targetUrl)}`;
 
                             const res = await axios.get(infoUrl, { headers: HEADERS, timeout: 90000 });
                             await safeDelete(sock, from, stDl.key);
@@ -397,7 +370,7 @@ async function startBot(isFreshStart = false) {
                             const lQual = sObj.quality || sObj.name || 'Auto Quality';
                             const fSize = sObj.size || 'N/A';
 
-                            const tMsg = "🎬 *" + mTitle.toUpperCase() + "*\n\n🌐 *Source*  •  " + currentProvider.toUpperCase() + "\n⭐ *IMDb*  •  " + imdbR + "\n🎞️ *Quality*  •  " + lQual + "\n📦 *Size*  •  " + fSize + "\n\n📝 *STORY*\n" + plot + "\n\n━━━━━━━━━━━━━━━━━━\n\n🎞️ *SARA MOVIE BOT*\n👤 *Created by Imalsha Nethsara*";
+                            const tMsg = "🎬 *" + mTitle.toUpperCase() + "*\n\n🌐 *Source*  •  CINESUBZ\n⭐ *IMDb*  •  " + imdbR + "\n🎞️ *Quality*  •  " + lQual + "\n📦 *Size*  •  " + fSize + "\n\n📝 *STORY*\n" + plot + "\n\n━━━━━━━━━━━━━━━━━━\n\n🎞️ *SARA MOVIE BOT*\n👤 *Created by Imalsha Nethsara*";
 
                             try {
                                 if (posterUrl) await sock.sendMessage(sendTargetJid, { image: { url: posterUrl }, caption: tMsg });
@@ -424,9 +397,9 @@ async function startBot(isFreshStart = false) {
                                 }
 
                                 console.log("⬆️ Uploading document to WhatsApp...");
-                                const stUl = await sock.sendMessage(from, { text: "⬆️ *Colab එකෙන් WhatsApp එකට Upload වෙමින් පවතී...*" });
+                                const stUl = await sock.sendMessage(from, { text: "⬆️ *WhatsApp එකට Upload වෙමින් පවතී...*" });
 
-                                const docMsg = "🎬 *MOVIE READY!* 🍿\n\n*" + mTitle + "*\n\n🌐 *Source*  " + currentProvider.toUpperCase() + "\n⭐ *IMDb*  " + imdbR + "\n🎞️ *Quality*  " + lQual + "\n📦 *Size*  " + fSize + "\n\n✅ Enjoy the movie!\n\n━━━━━━━━━━━━━━━━━━\n\n🤖 *SARA MOVIE BOT*\n👤 *Created by Imalsha Nethsara*";
+                                const docMsg = "🎬 *MOVIE READY!* 🍿\n\n*" + mTitle + "*\n\n🌐 *Source*  CINESUBZ\n⭐ *IMDb*  " + imdbR + "\n🎞️ *Quality*  " + lQual + "\n📦 *Size*  " + fSize + "\n\n✅ Enjoy the movie!\n\n━━━━━━━━━━━━━━━━━━\n\n🤖 *SARA MOVIE BOT*\n👤 *Created by Imalsha Nethsara*";
 
                                 await sock.sendMessage(sendTargetJid, { document: { url: tPath }, fileName: cleanTitle.replace(/\s+/g, '_') + ".mp4", mimetype: 'video/mp4', caption: docMsg });
                                 console.log("✅ Document Upload Complete!");
