@@ -1,4 +1,4 @@
-console.log("🚀 Initializing SARA MOVIE BOT (CineSubz Exclusive)...");
+console.log("🚀 Initializing SARA MOVIE BOT (CineSubz Exclusive - Smart 720p/480p Priority)...");
 
 const fs = require('fs');
 const path = require('path');
@@ -31,8 +31,8 @@ const userSessions = {};
 let pairingRequested = false;
 let reconnecting = false;
 
-process.on('uncaughtException', e => console.error('❌ EX:', e.message || e));
-process.on('unhandledRejection', e => console.error('❌ REJ:', e.message || e));
+process.on('uncaughtException', e => console.error('❌ EXCEPTION:', e.message || e));
+process.on('unhandledRejection', e => console.error('❌ REJECTION:', e.message || e));
 
 const parseSizeGB = (sz) => {
     if (!sz) return 0;
@@ -112,17 +112,17 @@ const safeDelete = async (s, f, k) => {
 };
 
 const downloadFileFast = async (u, d, sock, inboxJid) => {
-    console.log("📥 Resolving real link...");
+    console.log("\n📥 [RESOLVING DIRECT LINK] Target URL:", u);
     const r = await resolveRealLink(u);
-    console.log("🔗 Download Link:", r);
+    console.log("🔗 [FINAL DOWNLOAD LINK]:", r);
 
     if (sock && inboxJid) {
-        await sock.sendMessage(inboxJid, { text: "📥 *Movie එක Download වීම ආරම්භ විය...*\n\n(High Speed Fast Downloader Active 🚀)" });
+        await sock.sendMessage(inboxJid, { text: "📥 *Movie එක Colab සර්වර් එකට Download වීම ආරම්භ විය...*\n\n(High Speed Fast Downloader Active 🚀)" });
     }
 
     return new Promise((res, rej) => {
         let f = r.includes('pixeldrain.com/') && !r.includes('/api/file/') ? r.replace('pixeldrain.com/u/', 'pixeldrain.com/api/file/') : r;
-        console.log("\n🚀 Starting Fast Download (16 Threads - Progress below)...\n");
+        console.log("🚀 [ARIA2 DOWNLOAD STARTED] Threads: 16\n");
 
         const dir = path.dirname(d);
         const file = path.basename(d);
@@ -134,7 +134,7 @@ const downloadFileFast = async (u, d, sock, inboxJid) => {
             '--min-split-size=1M',
             '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
             '--check-certificate=false',
-            '--summary-interval=1',
+            '--summary-interval=2',
             '-d', dir,
             '-o', file,
             f
@@ -143,20 +143,20 @@ const downloadFileFast = async (u, d, sock, inboxJid) => {
         const child = spawn('aria2c', args);
 
         child.stdout.on('data', (data) => {
-            process.stdout.write(data.toString());
+            process.stdout.write("⚡ [PROGRESS] " + data.toString());
         });
 
         child.stderr.on('data', (data) => {
-            process.stderr.write(data.toString());
+            process.stderr.write("⚠️ [ARIA2 LOG] " + data.toString());
         });
 
         child.on('close', (code) => {
             if (code === 0 && fs.existsSync(d) && fs.statSync(d).size > 1000000) {
                 const szMB = (fs.statSync(d).size / (1024 * 1024)).toFixed(2);
-                console.log(`\n✅ Fast Download Finished! File Size: ${szMB} MB\n`);
+                console.log(`\n✅ [DOWNLOAD COMPLETE] File Size: ${szMB} MB\n`);
                 res(true);
             } else {
-                console.error(`\n❌ Aria2 Download Failed (Code: ${code})`);
+                console.error(`\n❌ [ARIA2 ERROR] Code: ${code}`);
                 rej(new Error("Download Failed"));
             }
         });
@@ -186,7 +186,7 @@ async function startBot(isFreshStart = false) {
 
         sock.ev.on('connection.update', async u => {
             const { connection: c, lastDisconnect: l } = u;
-            if (c) console.log('🔄 Connection Status:', c);
+            if (c) console.log('🔄 [BOT STATUS]:', c);
 
             if ((c === 'connecting' || !c) && !sock.authState.creds.registered && !pairingRequested) {
                 pairingRequested = true;
@@ -207,7 +207,7 @@ async function startBot(isFreshStart = false) {
 
             if (c === 'open') {
                 reconnecting = false;
-                console.log('\n✅ SARA MOVIE BOT ONLINE (CineSubz)!\n');
+                console.log('\n✅ SARA MOVIE BOT IS ONLINE (CineSubz Active)!\n');
             }
 
             if (c === 'close') {
@@ -241,7 +241,6 @@ async function startBot(isFreshStart = false) {
                     return sock.sendMessage(from, { text: "📌 *මෙම Chat / Group එකෙහි JID අංකය:*\n\n`" + from + "`" });
                 }
 
-                // Command Identification Logic (CineSubz Only)
                 let isGroupCmd = false;
                 let q = '';
 
@@ -263,17 +262,23 @@ async function startBot(isFreshStart = false) {
                         });
                     }
 
+                    console.log(`🔎 [SEARCH QUERY]: "${q}" from ${from}`);
                     const sw = await sock.sendMessage(from, { text: `🔎 *[CINESUBZ] හි සොයමින් පවතී...*` });
                     try {
                         const searchUrl = `${BASE_URL}/api/v1/cinesubz/search?q=${encodeURIComponent(q)}`;
+                        console.log("🌐 Requesting Search API:", searchUrl);
 
                         const res = await axios.get(searchUrl, { headers: HEADERS, timeout: 60000 });
                         const results = parseArr(res).slice(0, 10);
 
                         await safeDelete(sock, from, sw.key);
 
-                        if (!results.length) return sock.sendMessage(from, { text: `❌ [CINESUBZ] හි සෙවුම් ප්‍රතිඵල හමු නොවීය.` });
+                        if (!results.length) {
+                            console.log("❌ Search returned 0 results.");
+                            return sock.sendMessage(from, { text: `❌ [CINESUBZ] හි සෙවුම් ප්‍රතිඵල හමු නොවීය.` });
+                        }
 
+                        console.log(`✅ Found ${results.length} results.`);
                         userSessions[from] = { 
                             type: 'movie_search', 
                             results: results, 
@@ -289,6 +294,7 @@ async function startBot(isFreshStart = false) {
 
                         await sock.sendMessage(from, { text: list });
                     } catch (err) {
+                        console.error("❌ Search API Error:", err.message);
                         await safeDelete(sock, from, sw.key);
                         await sock.sendMessage(from, { text: "⚠️ Search Error! API එක පරීක්ෂා කරන්න." });
                     }
@@ -308,6 +314,9 @@ async function startBot(isFreshStart = false) {
                         const title = item.title || item.name || 'Selected Movie';
                         const cleanTitle = title.replace(/[^a-zA-Z0-9 ]/g, '').trim();
 
+                        console.log(`\n📌 [USER SELECTED ITEM ${idx + 1}]: ${title}`);
+                        console.log(`🔗 Target URL: ${targetUrl}`);
+
                         let sendTargetJid = from;
                         if (session.toGroup) {
                             if (TARGET_GROUP_JID && TARGET_GROUP_JID.endsWith('@g.us')) {
@@ -322,6 +331,7 @@ async function startBot(isFreshStart = false) {
 
                         try {
                             const infoUrl = `${BASE_URL}/api/v1/cinesubz/infodl?url=${encodeURIComponent(targetUrl)}`;
+                            console.log("🌐 Requesting Info & Download API:", infoUrl);
 
                             const res = await axios.get(infoUrl, { headers: HEADERS, timeout: 90000 });
                             await safeDelete(sock, from, stDl.key);
@@ -335,40 +345,47 @@ async function startBot(isFreshStart = false) {
                             const posterUrl = rData.image || rData.poster || item.image || item.poster;
                             const dList = rData.downloads || rData.download_links || rData.links || [];
 
+                            console.log(`📊 [API RAW DOWNLOAD LINKS COUNT]: ${dList.length}`);
+                            dList.forEach((d, i) => console.log(`   Link ${i + 1}: [Quality: ${d.quality || d.name}] -> ${d.link || d.url}`));
+
                             const vDownloads = dList.filter(i => {
                                 const l = (i.link || i.url || i.href || '').toLowerCase();
                                 const q = (i.quality || i.name || i.size || '').toLowerCase();
-                                return !l.includes('telegram') && !l.includes('t.me') && !q.includes('telegram') && !q.includes('2160') && !q.includes('4k');
+                                return !l.includes('telegram.org') && !q.includes('2160') && !q.includes('4k');
                             });
 
-                            if (!vDownloads.length) return sock.sendMessage(from, { text: "⚠️ සුදුසු Download link එකක් හමු නොවීය." });
+                            if (!vDownloads.length) {
+                                console.log("⚠️ No valid download links found after filtering.");
+                                return sock.sendMessage(from, { text: "⚠️ සුදුසු Download link එකක් හමු නොවීය." });
+                            }
 
-                            // Priority 720p with Smart Fallback
+                            // 🎯 SMART QUALITY PRIORITY: Always try 720p first, if > 2GB or missing, fallback to 480p
                             let item720 = vDownloads.find(i => (i.quality || i.name || '').toLowerCase().includes('720'));
                             let item480 = vDownloads.find(i => (i.quality || i.name || '').toLowerCase().includes('480'));
                             let item360 = vDownloads.find(i => (i.quality || i.name || '').toLowerCase().includes('360'));
 
-                            let sObj = item720 || item480 || item360 || vDownloads[0];
+                            let sObj = null;
 
-                            if (sObj && parseSizeGB(sObj.size || sObj.quality) > 2.0) {
-                                console.log("⚠️ Selected quality exceeds 2GB. Smart fallback to 480p...");
-                                if (item480) {
-                                    sObj = item480;
-                                } else if (item360) {
-                                    sObj = item360;
+                            if (item720) {
+                                const sz720 = parseSizeGB(item720.size || item720.quality);
+                                if (sz720 > 2.0) {
+                                    console.log(`⚠️ 720p size is greater than 2GB (${sz720}GB). Falling back to 480p...`);
+                                    sObj = item480 || item360 || item720;
                                 } else {
-                                    const smallerOne = vDownloads.find(i => parseSizeGB(i.size || i.quality) <= 2.0);
-                                    if (smallerOne) sObj = smallerOne;
+                                    console.log("🎯 Selected 720p quality.");
+                                    sObj = item720;
                                 }
-                            }
-
-                            if (sObj && parseSizeGB(sObj.size || sObj.quality) > 2.0) {
-                                return sock.sendMessage(from, { text: "⚠️ මෙම Movie එකේ ඇති සියලුම ප්‍රමාණයන් 2GB සීමාව ඉක්මවයි. WhatsApp එකට Upload කළ නොහැක." });
+                            } else {
+                                console.log("⚠️ 720p not found. Falling back to 480p / available quality...");
+                                sObj = item480 || item360 || vDownloads[0];
                             }
 
                             const dlUrl = sObj.link || sObj.url || sObj.href;
                             const lQual = sObj.quality || sObj.name || 'Auto Quality';
                             const fSize = sObj.size || 'N/A';
+
+                            console.log(`🎯 [FINAL CHOSEN QUALITY]: ${lQual}`);
+                            console.log(`🔗 [SELECTED DOWNLOAD LINK]: ${dlUrl}`);
 
                             const tMsg = "🎬 *" + mTitle.toUpperCase() + "*\n\n🌐 *Source*  •  CINESUBZ\n⭐ *IMDb*  •  " + imdbR + "\n🎞️ *Quality*  •  " + lQual + "\n📦 *Size*  •  " + fSize + "\n\n📝 *STORY*\n" + plot + "\n\n━━━━━━━━━━━━━━━━━━\n\n🎞️ *SARA MOVIE BOT*\n👤 *Created by Imalsha Nethsara*";
 
@@ -390,40 +407,42 @@ async function startBot(isFreshStart = false) {
                                 await downloadFileFast(dlUrl, tPath, sock, from);
 
                                 const actualSizeMB = fs.statSync(tPath).size / (1024 * 1024);
+                                console.log(`📦 [ACTUAL DOWNLOADED FILE SIZE]: ${actualSizeMB.toFixed(2)} MB`);
 
                                 if (actualSizeMB > 2000) {
+                                    console.log("❌ File exceeds WhatsApp 2GB limit.");
                                     cleanStorage();
-                                    return sock.sendMessage(from, { text: "⚠️ File එක 2GB සීමාව ඉක්මවයි." });
+                                    return sock.sendMessage(from, { text: "⚠️ මෙම Movie එකෙහි ඩවුන්ලෝඩ් වූ ෆයිල් එක 2GB සීමාව ඉක්මවයි. WhatsApp එකට Upload කළ නොහැක." });
                                 }
 
                                 console.log("⬆️ Uploading document to WhatsApp...");
                                 const stUl = await sock.sendMessage(from, { text: "⬆️ *WhatsApp එකට Upload වෙමින් පවතී...*" });
 
-                                const docMsg = "🎬 *MOVIE READY!* 🍿\n\n*" + mTitle + "*\n\n🌐 *Source*  CINESUBZ\n⭐ *IMDb*  " + imdbR + "\n🎞️ *Quality*  " + lQual + "\n📦 *Size*  " + fSize + "\n\n✅ Enjoy the movie!\n\n━━━━━━━━━━━━━━━━━━\n\n🤖 *SARA MOVIE BOT*\n👤 *Created by Imalsha Nethsara*";
+                                const docMsg = "🎬 *MOVIE READY!* 🍿\n\n*" + mTitle + "*\n\n🌐 *Source*  CINESUBZ\n⭐ *IMDb*  " + imdbR + "\n🎞️ *Quality*  " + lQual + "\n📦 *Size*  " + actualSizeMB.toFixed(2) + " MB\n\n✅ Enjoy the movie!\n\n━━━━━━━━━━━━━━━━━━\n\n🤖 *SARA MOVIE BOT*\n👤 *Created by Imalsha Nethsara*";
 
                                 await sock.sendMessage(sendTargetJid, { document: { url: tPath }, fileName: cleanTitle.replace(/\s+/g, '_') + ".mp4", mimetype: 'video/mp4', caption: docMsg });
-                                console.log("✅ Document Upload Complete!");
+                                console.log("✅ [SUCCESS] Document Upload Complete!");
 
                                 await safeDelete(sock, from, stUl.key);
                                 cleanStorage();
                             } catch (err) {
-                                console.error("❌ Download/Upload Error:", err);
+                                console.error("❌ Download/Upload Error:", err.message || err);
                                 cleanStorage();
-                                await sock.sendMessage(from, { text: "⚠️ Download/Upload Error!" });
+                                await sock.sendMessage(from, { text: "⚠️ Download/Upload හි දෝෂයක් සිදු විය!" });
                             }
                         } catch (err) {
-                            console.error("❌ Info Error:", err);
+                            console.error("❌ Info API Error:", err.message || err);
                             await safeDelete(sock, from, stDl.key);
                             await sock.sendMessage(from, { text: "⚠️ Info Error! API එක පරීක්ෂා කරන්න." });
                         }
                     }
                 }
             } catch (e) {
-                console.error(e);
+                console.error("❌ Message Processing Error:", e);
             }
         });
     } catch (e) {
-        console.error(e);
+        console.error("❌ Bot Fatal Error:", e);
     }
 }
 
